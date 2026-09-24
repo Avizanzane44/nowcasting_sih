@@ -1,0 +1,7 @@
+pysteps
+numpy
+scipy
+matplotlib
+fastapi
+uvicorn
+opencv-python
