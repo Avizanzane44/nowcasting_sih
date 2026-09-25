@@ -157,6 +157,10 @@ def main():
     sys.path.append('models/convlstm')
     from train import read_pgm_gz
 
+    sys.path.append('src')
+    import db_storage
+    db_storage.init_db()
+
     if args.model == "optical_flow":
         sys.path.append('src')
         from opencv_optical_flow import extrapolate_opencv
