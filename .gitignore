@@ -54,3 +54,5 @@ replace_remaining.py
 .DS_Store
 Thumbs.db
 desktop.ini
+
+dispatched_alerts_log.json
