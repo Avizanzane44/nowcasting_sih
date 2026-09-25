@@ -1,14 +1,56 @@
-nowcast_data.db*
-*.npy
+# Byte-compiled / optimized / DLL files
 __pycache__/
-convlstm_weights.pth
-outputs/
-*.log
-*.db-journal
-.ipynb_checkpoints/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environments
+venv/
+env/
+ENV/
+.venv/
+env.bak/
+venv.bak/
+
+# Decompressed / Raw Heavy Data
+# (Keep the original .pgm.gz, ignore runtime decompressed .pgm files)
+*.pgm
+!data/raw/radar/pysteps_data/*.pgm.gz
+
+# Runtime SQLite Database & WAL logs
+data/processed/*.db
+data/processed/*.db-journal
+data/processed/*.db-wal
+data/processed/*.db-shm
+*.db
+*.sqlite3
+
+# Daemon Runtime / Generated Flat Files
+radar_obs.npy
+radar_forecast.npy
 live_hazard_alerts.json
 forecast_storm_cells.json
 replay_state.json
-dispatched_alerts_log.json
-verification_metrics.json
 
+# PyTorch Model Checkpoints & Large Weights
+*.pth
+*.pt
+*.onnx
+
+# Temporary repair & one-off utility scripts
+fix_encoding.py
+replace_mojibake.py
+replace_remaining.py
+
+# Jupyter Notebook & Profiling checkpoints
+.ipynb_checkpoints/
+
+# IDE & OS Generated Files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.DS_Store
+Thumbs.db
+desktop.ini
