@@ -15,7 +15,8 @@ from matplotlib.colors import LinearSegmentedColormap
 from scipy.ndimage import gaussian_filter
 from fastapi import FastAPI, Response, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 
 import sys, os; sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
 import alert_dispatcher
@@ -30,6 +31,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+dashboard_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "dashboard")
+if os.path.exists(dashboard_dir):
+    app.mount("/dashboard", StaticFiles(directory=dashboard_dir, html=True), name="dashboard")
+
+@app.get("/")
+def read_root():
+    html_path = os.path.join(dashboard_dir, "dashboard.html")
+    if os.path.exists(html_path):
+        return FileResponse(html_path)
+    return {"status": "Nowcasting API Online"}
 
 RADAR_COLORS = [
     (0.00, (0.0, 0.0, 0.0, 0.0)),       
