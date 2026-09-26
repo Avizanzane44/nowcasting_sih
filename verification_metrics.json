@@ -1,0 +1,13 @@
+{
+  "5 mm/h Threshold": [],
+  "15 mm/h Threshold": [],
+  "30 mm/h Threshold": [],
+  "models": {
+    "optical_flow": {
+      "5 mm/h Threshold": [],
+      "15 mm/h Threshold": [],
+      "30 mm/h Threshold": []
+    },
+    "convlstm": {}
+  }
+}
