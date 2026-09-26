@@ -9,6 +9,9 @@ import os
 import json
 import datetime
 import urllib.request
+import sys, os
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "config"))
+import config
 
 DISPATCH_LOG_FILE = "dispatched_alerts_log.json"
 
@@ -90,7 +93,7 @@ def run_alert_dispatch():
 
     for alert in alerts:
         # Trigger immediate dispatch if hazard is imminent (ETA <= 30 mins) or CRITICAL/HIGH
-        if alert.get("status") == "IMMINENT_HAZARD" and (alert.get("eta_minutes", 60) <= 35 or alert.get("severity") in ["CRITICAL", "HIGH"]):
+        if alert.get("status") == config.ALERT_THRESHOLDS["IMMINENT_HAZARD_STATUS"] and (alert.get("eta_minutes", 60) <= config.ALERT_THRESHOLDS["ETA_MINUTES_MAX"] or alert.get("severity") in config.ALERT_THRESHOLDS["SEVERE_LEVELS"]):
             loc = alert["location"]
             
             # Select target channel based on location category
