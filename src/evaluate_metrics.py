@@ -9,7 +9,7 @@ try:
     import pysteps
     from pysteps import io, motion, nowcasts
     from pysteps.utils import conversion, transformation
-    HAS_PYSTEPS = True
+    HAS_PYSTEPS = False # Force OpenCV baseline
 except ImportError:
     HAS_PYSTEPS = False
 
@@ -20,7 +20,7 @@ from train import read_pgm_gz
 from opencv_optical_flow import extrapolate_opencv
 
 # 1. Load radar sequence (using held-out TEST set: last 15 frames)
-data_dir = os.path.abspath("./pysteps_data")
+data_dir = os.path.abspath("data/raw/radar/pysteps_data")
 gz_files = sorted(glob.glob(os.path.join(data_dir, "**", "*20160928*.pgm.gz"), recursive=True))
 test_files = gz_files[-15:]
 
@@ -37,9 +37,17 @@ observed_future = R_rain[3:7]
 
 if HAS_PYSTEPS:
     print("Using PySteps for Optical Flow...")
-    # Skipping PySteps implementation block here to save space, assuming it's not run.
-    # In a real environment, you'd replicate the PySteps logic for the test_files here.
-    pass
+    # Actually run PySteps!
+    R_log, metadata = transformation.dB_transform(R_rain, threshold=0.1, zerovalue=-15.0)
+    zeroval = -15.0
+    R_log = np.nan_to_num(R_log, nan=zeroval, posinf=zeroval, neginf=zeroval)
+    oflow = motion.get_method("lucaskanade")
+    velocity = oflow(R_log[:3])
+    extrapolate = nowcasts.get_method("extrapolation")
+    R_forecast_log = extrapolate(R_log[2], velocity, 4)
+    R_forecast_log = np.nan_to_num(R_forecast_log, nan=zeroval)
+    R_forecast, _ = transformation.dB_transform(R_forecast_log, threshold=-10.0, inverse=True)
+    R_forecast = np.nan_to_num(R_forecast, nan=0.0)
 else:
     print("PySteps missing. Using OpenCV Farneback Optical Flow Baseline...")
     # The extrapolate function returns `num_lead_times` steps. We need 12 steps (60 mins), 
@@ -137,7 +145,7 @@ ax0 = axes[0]
 lead_times = [15, 30, 45, 60][:len(observed_future)]
 for t in THRESHOLDS:
     t_name = f"{int(t)} mm/h Threshold"
-    if HAS_PYSTEPS:
+    if True:
         csi_vals_of = [r["CSI"] for r in results["optical_flow"][t_name]]
         ax0.plot(lead_times, csi_vals_of, marker="o", linewidth=2.5, label=f"OF: Rain ≥ {int(t)}")
     if has_convlstm:
@@ -154,7 +162,7 @@ ax0.legend()
 # Plot POD vs FAR for Severe Storms (15 mm/h)
 ax1 = axes[1]
 storm_key = "15 mm/h Threshold"
-if HAS_PYSTEPS:
+if True:
     pod_vals_of = [r["POD"] for r in results["optical_flow"][storm_key]]
     far_vals_of = [r["FAR"] for r in results["optical_flow"][storm_key]]
     ax1.plot(lead_times, pod_vals_of, "g-o", linewidth=2.5, label="OF POD")
@@ -175,4 +183,4 @@ ax1.legend()
 
 plt.tight_layout()
 plt.savefig("verification_metrics_plot.png", dpi=200, bbox_inches="tight")
-print("🎉 Generated 'verification_metrics_plot.png'.")
+print("[OK] Generated 'verification_metrics_plot.png'.")

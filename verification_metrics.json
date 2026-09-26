@@ -1,12 +1,282 @@
 {
-  "5 mm/h Threshold": [],
-  "15 mm/h Threshold": [],
-  "30 mm/h Threshold": [],
+  "5 mm/h Threshold": [
+    {
+      "hits": 492175,
+      "misses": 25889,
+      "false_alarms": 26879,
+      "correct_negs": 386817,
+      "CSI": 0.903,
+      "POD": 0.95,
+      "FAR": 0.052,
+      "HSS": 0.885,
+      "lead_time_min": 15
+    },
+    {
+      "hits": 481081,
+      "misses": 37127,
+      "false_alarms": 32023,
+      "correct_negs": 381529,
+      "CSI": 0.874,
+      "POD": 0.928,
+      "FAR": 0.062,
+      "HSS": 0.85,
+      "lead_time_min": 30
+    },
+    {
+      "hits": 473423,
+      "misses": 45208,
+      "false_alarms": 33629,
+      "correct_negs": 379500,
+      "CSI": 0.857,
+      "POD": 0.913,
+      "FAR": 0.066,
+      "HSS": 0.829,
+      "lead_time_min": 45
+    },
+    {
+      "hits": 465685,
+      "misses": 53565,
+      "false_alarms": 33683,
+      "correct_negs": 378827,
+      "CSI": 0.842,
+      "POD": 0.897,
+      "FAR": 0.067,
+      "HSS": 0.811,
+      "lead_time_min": 60
+    }
+  ],
+  "15 mm/h Threshold": [
+    {
+      "hits": 432405,
+      "misses": 28759,
+      "false_alarms": 25398,
+      "correct_negs": 445198,
+      "CSI": 0.889,
+      "POD": 0.938,
+      "FAR": 0.055,
+      "HSS": 0.884,
+      "lead_time_min": 15
+    },
+    {
+      "hits": 421115,
+      "misses": 40000,
+      "false_alarms": 34644,
+      "correct_negs": 436001,
+      "CSI": 0.849,
+      "POD": 0.913,
+      "FAR": 0.076,
+      "HSS": 0.84,
+      "lead_time_min": 30
+    },
+    {
+      "hits": 413849,
+      "misses": 47354,
+      "false_alarms": 40021,
+      "correct_negs": 430536,
+      "CSI": 0.826,
+      "POD": 0.897,
+      "FAR": 0.088,
+      "HSS": 0.812,
+      "lead_time_min": 45
+    },
+    {
+      "hits": 407538,
+      "misses": 53312,
+      "false_alarms": 42784,
+      "correct_negs": 428126,
+      "CSI": 0.809,
+      "POD": 0.884,
+      "FAR": 0.095,
+      "HSS": 0.794,
+      "lead_time_min": 60
+    }
+  ],
+  "30 mm/h Threshold": [
+    {
+      "hits": 226807,
+      "misses": 52,
+      "false_alarms": 140,
+      "correct_negs": 704761,
+      "CSI": 0.999,
+      "POD": 1.0,
+      "FAR": 0.001,
+      "HSS": 0.999,
+      "lead_time_min": 15
+    },
+    {
+      "hits": 226786,
+      "misses": 73,
+      "false_alarms": 887,
+      "correct_negs": 704014,
+      "CSI": 0.996,
+      "POD": 1.0,
+      "FAR": 0.004,
+      "HSS": 0.997,
+      "lead_time_min": 30
+    },
+    {
+      "hits": 226776,
+      "misses": 83,
+      "false_alarms": 2327,
+      "correct_negs": 702574,
+      "CSI": 0.989,
+      "POD": 1.0,
+      "FAR": 0.01,
+      "HSS": 0.993,
+      "lead_time_min": 45
+    },
+    {
+      "hits": 226753,
+      "misses": 122,
+      "false_alarms": 3960,
+      "correct_negs": 700925,
+      "CSI": 0.982,
+      "POD": 0.999,
+      "FAR": 0.017,
+      "HSS": 0.988,
+      "lead_time_min": 60
+    }
+  ],
   "models": {
     "optical_flow": {
-      "5 mm/h Threshold": [],
-      "15 mm/h Threshold": [],
-      "30 mm/h Threshold": []
+      "5 mm/h Threshold": [
+        {
+          "hits": 492175,
+          "misses": 25889,
+          "false_alarms": 26879,
+          "correct_negs": 386817,
+          "CSI": 0.903,
+          "POD": 0.95,
+          "FAR": 0.052,
+          "HSS": 0.885,
+          "lead_time_min": 15
+        },
+        {
+          "hits": 481081,
+          "misses": 37127,
+          "false_alarms": 32023,
+          "correct_negs": 381529,
+          "CSI": 0.874,
+          "POD": 0.928,
+          "FAR": 0.062,
+          "HSS": 0.85,
+          "lead_time_min": 30
+        },
+        {
+          "hits": 473423,
+          "misses": 45208,
+          "false_alarms": 33629,
+          "correct_negs": 379500,
+          "CSI": 0.857,
+          "POD": 0.913,
+          "FAR": 0.066,
+          "HSS": 0.829,
+          "lead_time_min": 45
+        },
+        {
+          "hits": 465685,
+          "misses": 53565,
+          "false_alarms": 33683,
+          "correct_negs": 378827,
+          "CSI": 0.842,
+          "POD": 0.897,
+          "FAR": 0.067,
+          "HSS": 0.811,
+          "lead_time_min": 60
+        }
+      ],
+      "15 mm/h Threshold": [
+        {
+          "hits": 432405,
+          "misses": 28759,
+          "false_alarms": 25398,
+          "correct_negs": 445198,
+          "CSI": 0.889,
+          "POD": 0.938,
+          "FAR": 0.055,
+          "HSS": 0.884,
+          "lead_time_min": 15
+        },
+        {
+          "hits": 421115,
+          "misses": 40000,
+          "false_alarms": 34644,
+          "correct_negs": 436001,
+          "CSI": 0.849,
+          "POD": 0.913,
+          "FAR": 0.076,
+          "HSS": 0.84,
+          "lead_time_min": 30
+        },
+        {
+          "hits": 413849,
+          "misses": 47354,
+          "false_alarms": 40021,
+          "correct_negs": 430536,
+          "CSI": 0.826,
+          "POD": 0.897,
+          "FAR": 0.088,
+          "HSS": 0.812,
+          "lead_time_min": 45
+        },
+        {
+          "hits": 407538,
+          "misses": 53312,
+          "false_alarms": 42784,
+          "correct_negs": 428126,
+          "CSI": 0.809,
+          "POD": 0.884,
+          "FAR": 0.095,
+          "HSS": 0.794,
+          "lead_time_min": 60
+        }
+      ],
+      "30 mm/h Threshold": [
+        {
+          "hits": 226807,
+          "misses": 52,
+          "false_alarms": 140,
+          "correct_negs": 704761,
+          "CSI": 0.999,
+          "POD": 1.0,
+          "FAR": 0.001,
+          "HSS": 0.999,
+          "lead_time_min": 15
+        },
+        {
+          "hits": 226786,
+          "misses": 73,
+          "false_alarms": 887,
+          "correct_negs": 704014,
+          "CSI": 0.996,
+          "POD": 1.0,
+          "FAR": 0.004,
+          "HSS": 0.997,
+          "lead_time_min": 30
+        },
+        {
+          "hits": 226776,
+          "misses": 83,
+          "false_alarms": 2327,
+          "correct_negs": 702574,
+          "CSI": 0.989,
+          "POD": 1.0,
+          "FAR": 0.01,
+          "HSS": 0.993,
+          "lead_time_min": 45
+        },
+        {
+          "hits": 226753,
+          "misses": 122,
+          "false_alarms": 3960,
+          "correct_negs": 700925,
+          "CSI": 0.982,
+          "POD": 0.999,
+          "FAR": 0.017,
+          "HSS": 0.988,
+          "lead_time_min": 60
+        }
+      ]
     },
     "convlstm": {}
   }
