@@ -9,14 +9,19 @@ import glob
 import gzip
 import json
 import datetime
+import math
 import cv2
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import numpy as np
+import requests
 import pysteps
 from pysteps import io, motion, nowcasts
 from pysteps.utils import conversion, transformation
 from scipy import ndimage
+from scipy.stats import circmean, circstd
+from scipy.ndimage import median_filter, gaussian_filter
+from PIL import Image
 
 # ==========================================
 # 1. HAZARD THRESHOLD DEFINITIONS (IMD Standards)
@@ -100,8 +105,8 @@ def compute_arrival_countdowns(forecast_frames_cells, monitored_locations):
             
             for cell in cells_at_time:
                 bbox = cell["bbox"]
-                if (bbox["min_x"] - 25 <= loc_x <= bbox["max_x"] + 25) and \
-                   (bbox["min_y"] - 25 <= loc_y <= bbox["max_y"] + 25):
+                if (bbox["min_x"] - 3 <= loc_x <= bbox["max_x"] + 3) and \
+                   (bbox["min_y"] - 3 <= loc_y <= bbox["max_y"] + 3):
                     
                     alerts.append({
                         "location": loc_name,
@@ -111,7 +116,7 @@ def compute_arrival_countdowns(forecast_frames_cells, monitored_locations):
                         "severity": cell["severity"],
                         "expected_peak_rain_mmh": cell["max_intensity_mmh"],
                         "forecast_arrival": cell["forecast_time"],
-                        "alert_message": f"⚠️ {cell['severity']} Early Warning for {loc_name}: {cell['hazard_type']} arriving in {lead_time_min} mins!"
+                        "alert_message": f"[WARN] {cell['severity']} Early Warning for {loc_name}: {cell['hazard_type']} arriving in {lead_time_min} mins!"
                     })
                     hit_found = True
                     break
@@ -125,56 +130,248 @@ def compute_arrival_countdowns(forecast_frames_cells, monitored_locations):
                 "eta_minutes": None,
                 "hazard_type": "NONE",
                 "severity": "NORMAL",
-                "alert_message": f"✅ {loc_name}: No convective hazards detected in next 60 minutes."
+                "alert_message": f"[OK] {loc_name}: No convective hazards detected in next 60 minutes."
             })
     return alerts
 
 
-# Load and run nowcast pipeline
-data_dir = os.path.abspath("./pysteps_data")
-gz_files = sorted(glob.glob(os.path.join(data_dir, "**", "*20160928*.pgm.gz"), recursive=True))
+def run_legacy_delhi_nowcast(data_dir="./pysteps_data"):
+    """Legacy Nowcasting Pipeline using FMI PGM files for Delhi."""
+    try:
+        data_dir = os.path.abspath(data_dir)
+        gz_files = sorted(glob.glob(os.path.join(data_dir, "**", "*20160928*.pgm.gz"), recursive=True))
+        if not gz_files:
+            print("No legacy PGM files found. Skipping legacy initialization.")
+            return None
+        selected_files = []
+        for gz_path in gz_files[:3]:
+            pgm_path = gz_path[:-3]
+            if not os.path.exists(pgm_path):
+                with gzip.open(gz_path, "rb") as f_in, open(pgm_path, "wb") as f_out:
+                    f_out.write(f_in.read())
+            selected_files.append((pgm_path, None))
+        importer = io.get_method("fmi_pgm", "importer")
+        R, _, metadata = io.read_timeseries(selected_files, importer)
+        R_rain, metadata = conversion.to_rainrate(R, metadata)
+        R_rain = np.nan_to_num(R_rain, nan=0.0)
+        R_log, metadata = transformation.dB_transform(R_rain, metadata, threshold=0.1, zerovalue=-15.0)
+        zeroval = metadata.get("zerovalue", -15.0)
+        R_log = np.nan_to_num(R_log, nan=zeroval, posinf=zeroval, neginf=zeroval)
+        oflow = motion.get_method("lucaskanade")
+        velocity = oflow(R_log)
+        extrapolate = nowcasts.get_method("extrapolation")
+        n_leadtimes = 12
+        R_forecast_log = extrapolate(R_log[-1], velocity, n_leadtimes)
+        R_forecast_log = np.nan_to_num(R_forecast_log, nan=zeroval)
+        R_forecast, _ = transformation.dB_transform(R_forecast_log, threshold=-10.0, inverse=True)
+        R_forecast = np.nan_to_num(R_forecast, nan=0.0)
+        base_time = datetime.datetime.now(datetime.timezone.utc)
+        all_forecast_cells = {0: extract_storm_cells(R_rain[-1], 0, base_time)}
+        for step_idx in range(n_leadtimes):
+            lead_min = (step_idx + 1) * 5
+            grid = R_forecast[step_idx]
+            all_forecast_cells[lead_min] = extract_storm_cells(grid, lead_min, base_time)
+        countdowns = compute_arrival_countdowns(all_forecast_cells, MONITORED_CITIES)
+        with open("live_hazard_alerts.json", "w") as f:
+            json.dump(countdowns, f, indent=2)
+        with open("forecast_storm_cells.json", "w") as f:
+            json.dump(all_forecast_cells, f, indent=2)
+        print("India Regional Nowcast Engine Initialized Successfully.")
+        return countdowns
+    except Exception as e:
+        print(f"Legacy nowcast initialization skipped: {e}")
+        return None
 
-selected_files = []
-for gz_path in gz_files[:3]:
-    pgm_path = gz_path[:-3]
-    if not os.path.exists(pgm_path):
-        with gzip.open(gz_path, "rb") as f_in, open(pgm_path, "wb") as f_out:
-            f_out.write(f_in.read())
-    selected_files.append((pgm_path, None))
+# ==========================================
+# RAINVIEWER LIVE RADAR NOWCASTING ENGINE
+# ==========================================
 
-importer = io.get_method("fmi_pgm", "importer")
-R, _, metadata = io.read_timeseries(selected_files, importer)
-R_rain, metadata = conversion.to_rainrate(R, metadata)
-R_rain = np.nan_to_num(R_rain, nan=0.0)
+# Data Provenance: RainViewer redistributed IMD Doppler Radar composite tiles (mausam.imd.gov.in).
+# Note: Intensity values are reverse-engineered from PNG color palette steps, 
+# not calibrated raw Level-1/2 reflectivity arrays.
 
-R_log, metadata = transformation.dB_transform(R_rain, metadata, threshold=0.1, zerovalue=-15.0)
-zeroval = metadata.get("zerovalue", -15.0)
-R_log = np.nan_to_num(R_log, nan=zeroval, posinf=zeroval, neginf=zeroval)
+RAINVIEWER_COLOR_SCALE_DBZ = {
+    (0, 0, 0, 0): 0.0,
+    (0, 78, 120): 10.0,
+    (0, 91, 142): 15.0,
+    (0, 105, 156): 20.0,
+    (0, 127, 180): 25.0,
+    (0, 154, 213): 30.0,
+    (0, 163, 224): 35.0,
+    (0, 255, 0): 40.0,
+    (173, 255, 47): 42.0,
+    (255, 255, 0): 45.0,
+    (255, 238, 0): 48.0,
+    (255, 210, 0): 50.0,
+    (255, 139, 0): 55.0,
+    (255, 0, 0): 60.0,
+    (200, 0, 0): 65.0,
+    (255, 0, 255): 70.0,
+}
 
-oflow = motion.get_method("lucaskanade")
-velocity = oflow(R_log)
+rv_colors = np.array([list(k[:3]) for k in RAINVIEWER_COLOR_SCALE_DBZ.keys() if k != (0,0,0,0)])
+rv_intensities = np.array([v for k, v in RAINVIEWER_COLOR_SCALE_DBZ.items() if k != (0,0,0,0)])
 
-extrapolate = nowcasts.get_method("extrapolation")
-n_leadtimes = 12
-R_forecast_log = extrapolate(R_log[-1], velocity, n_leadtimes)
-R_forecast_log = np.nan_to_num(R_forecast_log, nan=zeroval)
-R_forecast, _ = transformation.dB_transform(R_forecast_log, threshold=-10.0, inverse=True)
-R_forecast = np.nan_to_num(R_forecast, nan=0.0)
+def _color_to_dbz(rgb):
+    r, g, b, a = rgb
+    if a == 0:
+        return 0.0
+    t = (r, g, b)
+    if t in RAINVIEWER_COLOR_SCALE_DBZ:
+        return RAINVIEWER_COLOR_SCALE_DBZ[t]
+    dists = np.sum((rv_colors - [r, g, b]) ** 2, axis=1)
+    best_idx = np.argmin(dists)
+    if dists[best_idx] > 20000:
+        return 0.0
+    return rv_intensities[best_idx]
 
-base_time = datetime.datetime.now(datetime.timezone.utc)
-all_forecast_cells = {0: extract_storm_cells(R_rain[-1], 0, base_time)}
+def decode_rainviewer_png(img_path):
+    """Decodes a RainViewer PNG tile into a 2D numpy reflectivity grid (dBZ)."""
+    img = Image.open(img_path).convert("RGBA")
+    arr = np.array(img)
+    h, w, c = arr.shape
+    flat_pixels = arr.reshape(-1, 4)
+    flat_decoded = np.zeros(flat_pixels.shape[0], dtype=np.float32)
+    for i, p in enumerate(flat_pixels):
+        flat_decoded[i] = _color_to_dbz(p)
+    return flat_decoded.reshape((h, w))
 
-for step_idx in range(n_leadtimes):
-    lead_min = (step_idx + 1) * 5
-    grid = R_forecast[step_idx]
-    all_forecast_cells[lead_min] = extract_storm_cells(grid, lead_min, base_time)
+def latlng_to_tile_pixel(lat, lon, zoom, tile_x, tile_y):
+    lat_rad = math.radians(lat)
+    n = 2.0 ** zoom
+    global_x = (lon + 180.0) / 360.0 * (n * 256)
+    global_y = (1.0 - math.asinh(math.tan(lat_rad)) / math.pi) / 2.0 * (n * 256)
+    pixel_x = int(global_x - tile_x * 256)
+    pixel_y = int(global_y - tile_y * 256)
+    return pixel_x, pixel_y
 
-countdowns = compute_arrival_countdowns(all_forecast_cells, MONITORED_CITIES)
+def run_rainviewer_nowcast_for_mumbai(cache_dir="tests/mumbai_cache", max_angular_std_dev=40.0, locations=None):
+    """
+    Runs the complete RainViewer live nowcasting engine for the Mumbai & Western Ghats zone.
+    Includes: Fetch -> Decode -> Farneback Motion -> Spatial Filtering -> Angular Coherence Gate -> Extrapolation -> Alert Dispatch.
+    
+    Data Provenance: RainViewer redistributed IMD Doppler radar composite tiles.
+    Intensity Limitations: Reverse-engineered from PNG color palette steps.
+    """
+    print("\n=======================================================")
+    print("RUNNING LIVE RAINVIEWER NOWCAST: MUMBAI & WESTERN GHATS")
+    print("=======================================================")
+    
+    os.makedirs(cache_dir, exist_ok=True)
+    
+    res = requests.get('https://api.rainviewer.com/public/weather-maps.json')
+    past_frames = res.json()['radar']['past'][-4:]
+    
+    frames = []
+    timestamps = []
+    
+    zoom = 6
+    tile_x, tile_y = 44, 28
+    
+    for frame in past_frames:
+        path = frame['path']
+        ts = frame['time']
+        timestamps.append(ts)
+        url = f"https://tilecache.rainviewer.com{path}/256/{zoom}/{tile_x}/{tile_y}/2/0_0.png"
+        img_path = os.path.join(cache_dir, f"tile_{ts}.png")
+        
+        if not os.path.exists(img_path):
+            with open(img_path, 'wb') as f:
+                f.write(requests.get(url).content)
+                
+        grid = decode_rainviewer_png(img_path)
+        frames.append(grid)
+        
+    print(f"Loaded {len(frames)} frames for Mumbai (Timestamps: {timestamps})")
+    
+    img1 = np.clip(frames[-2] * (255.0 / 50.0), 0, 255).astype(np.uint8)
+    img2 = np.clip(frames[-1] * (255.0 / 50.0), 0, 255).astype(np.uint8)
+    
+    flow = cv2.calcOpticalFlowFarneback(img1, img2, None, 
+                                        pyr_scale=0.5, levels=3, winsize=15, 
+                                        iterations=3, poly_n=5, poly_sigma=1.2, flags=0)
+    u_raw = flow[:, :, 0]
+    v_raw = flow[:, :, 1]
+    
+    u_filt = gaussian_filter(median_filter(u_raw, size=21), sigma=5)
+    v_filt = gaussian_filter(median_filter(v_raw, size=21), sigma=5)
+    
+    # Angular Coherence Gate Check
+    active_mask = frames[-2] > 0
+    u_active = u_filt[active_mask]
+    v_active = v_filt[active_mask]
+    mag = np.sqrt(u_active**2 + v_active**2)
+    valid = mag > 0.1
+    
+    if np.sum(valid) < 5:
+        print("[ANGULAR COHERENCE GATE] Insufficient active storm vectors. Setting advection to stationary.")
+        u_final = np.zeros_like(u_filt)
+        v_final = np.zeros_like(v_filt)
+        coherence_passed = False
+    else:
+        angles = np.arctan2(v_active[valid], u_active[valid])
+        c_mean = np.degrees(circmean(angles)) % 360
+        c_std = np.degrees(circstd(angles))
+        
+        print(f"[ANGULAR COHERENCE STATS] Mean Angle: {c_mean:.1f} deg, Angular StdDev: {c_std:.1f} deg")
+        
+        if c_std > max_angular_std_dev:
+            print(f"[WARN] [ANGULAR COHERENCE GATE TRIPPED] StdDev {c_std:.1f} deg > {max_angular_std_dev} deg. Stationary convection detected. Zeroing flow field.")
+            u_final = np.zeros_like(u_filt)
+            v_final = np.zeros_like(v_filt)
+            coherence_passed = False
+        else:
+            print(f"[OK] [ANGULAR COHERENCE GATE PASSED] Coherent advection locked. Moving at {c_mean:.1f} deg.")
+            u_final = u_filt
+            v_final = v_filt
+            coherence_passed = True
+            
+    num_lead_times = 6
+    forecast_grids = [frames[-1]]
+    h, w = frames[-1].shape
+    grid_x, grid_y = np.meshgrid(np.arange(w), np.arange(h))
+    
+    for step in range(1, num_lead_times + 1):
+        map_x = np.float32(grid_x - u_final * step)
+        map_y = np.float32(grid_y - v_final * step)
+        forecast = cv2.remap(frames[-1], map_x, map_y, 
+                             interpolation=cv2.INTER_LINEAR, 
+                             borderMode=cv2.BORDER_CONSTANT, 
+                             borderValue=0)
+        forecast_grids.append(forecast)
+        
+    if locations is None:
+        mumbai_locations = [
+            {"name": "CSIA Mumbai", "lat": 19.089, "lng": 72.865},
+            {"name": "Navi Mumbai", "lat": 19.033, "lng": 73.029},
+            {"name": "Lonavala Ghats", "lat": 18.748, "lng": 73.405}
+        ]
+        
+        for loc in mumbai_locations:
+            px, py = latlng_to_tile_pixel(loc["lat"], loc["lng"], zoom, tile_x, tile_y)
+            loc["x"] = px
+            loc["y"] = py
+    else:
+        mumbai_locations = locations
+        
+    base_time = datetime.datetime.now(datetime.timezone.utc)
+    mumbai_forecast_cells = {}
+    
+    for idx, grid in enumerate(forecast_grids):
+        lead_min = idx * 10
+        mumbai_forecast_cells[lead_min] = extract_storm_cells(grid, lead_min, base_time)
+        
+    mumbai_alerts = compute_arrival_countdowns(mumbai_forecast_cells, mumbai_locations)
+    
+    with open("mumbai_hazard_alerts.json", "w") as f:
+        json.dump(mumbai_alerts, f, indent=2)
+        
+    with open("mumbai_forecast_cells.json", "w") as f:
+        json.dump(mumbai_forecast_cells, f, indent=2)
+        
+    print(f"Successfully generated Mumbai hazard alerts: {len(mumbai_alerts)} locations monitored.")
+    return mumbai_alerts, mumbai_forecast_cells, coherence_passed
 
-with open("live_hazard_alerts.json", "w") as f:
-    json.dump(countdowns, f, indent=2)
-
-with open("forecast_storm_cells.json", "w") as f:
-    json.dump(all_forecast_cells, f, indent=2)
-
-print("India Regional Nowcast Engine Initialized Successfully.")
+if __name__ == "__main__":
+    run_legacy_delhi_nowcast()
+    run_rainviewer_nowcast_for_mumbai()
