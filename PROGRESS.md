@@ -50,8 +50,19 @@ Because the environment lacks MSVC C++ tools to run the original `pysteps` basel
   - Solved concurrency/locking issues between the background daemon (`run_nowcast.py`) and the FastAPI server (`api/server.py`).
   - Pipeline verified end-to-end; rows are successfully inserted and served via API without changing `dashboard/dashboard.html`.
 
-### 6. Dashboard / GIS: 🟢 Done
+
+### 6. Dashboard / GIS: 🟡 Work In Progress
 - **What's done**: The interactive Leaflet.js dashboard (`dashboard/dashboard.html`) pulls real alerts, real radar layers, and real verification metrics from the backend.
+- **UI & UX Refinement (Professional Ops Console)**:
+  - Flattened the "AI-generated neon/glow" aesthetic into a restrained, professional ops-console palette (Grafana/Datadog style). Removed CSS glows, drop-shadows, and inline JavaScript `box-shadow` styles inside `renderLocations()`.
+  - Rebuilt the region selector from a native browser `<select>` to a custom `div`-based listbox dropdown to ensure consistent dark-theme rendering.
+  - Added a startup splash animation (radar logo, sonar pulse, boot sequence) that plays on initial load without blocking background API calls. It can be skipped via click.
+  - Implemented `leaflet.markercluster` to handle map pin label collisions intelligently at lower zoom levels.
+  - Established and documented a strict Z-Index scale (base map=1, map controls=1000, header=1500, dropdown=1600, modals=2200, splash=9999) to definitively fix stacking bugs (e.g., dropdowns hiding behind banners, or the header blocking modal close buttons).
+- **RainViewer Integration**:
+  - Validated that RainViewer's India radar overlay is genuine IMD radar data, directly sourcing from IMD's `mausam.imd.gov.in` and `ddgmui.imd.gov.in`. 
+  - **Stage 1 (Tile Intensity Decoding) Completed**: Implemented standalone decoder (`tests/decode_rainviewer_test.py`). Successfully mapped palette colors to numpy intensity grids (`tests/himalayan_intensity_test.npy`). The decoded output is visually consistent with the live RainViewer map at the time of testing; no independent ground-truth dBZ comparison was available to validate pixel-level accuracy.
+  - *Current Scope*: Stage 1 is verified in isolation. Wiring into live optical-flow / hazard-tracking backends (Stage 2+) has not yet started.
 - **Interactive Features Status**:
   - **Live/Real API Integration**: The timeline slider (0m to 60m playback) fully controls the backend `/api/layer` and properly pulls forecasted grids; alerts are actively populated from the database `/api/alerts`; metrics dynamically pull from `/api/metrics`.
   - **Demo/Mock Data**: Several selectable zones in the top dropdown (Himalayan Belt, Mumbai Ghats, Northeast Bengal) are **hardcoded frontend presets** with no live tracking backend support. They have been relabeled as `[Demo Preset - No Live Data]` in the UI to prevent deceiving end-users. The only fully live, backend-integrated zone is Delhi-NCR.
