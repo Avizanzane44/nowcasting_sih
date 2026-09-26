@@ -18,7 +18,33 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
-import sys, os; sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
+import sys, os
+import threading
+import time
+import urllib.request
+import logging
+
+rainviewer_cache = {"path": None}
+
+def poll_rainviewer():
+    while True:
+        try:
+            req = urllib.request.Request("https://api.rainviewer.com/public/weather-maps.json")
+            with urllib.request.urlopen(req, timeout=10) as response:
+                data = json.loads(response.read())
+                past = data.get("radar", {}).get("past", [])
+                if past:
+                    rainviewer_cache["path"] = past[-1]["path"]
+        except Exception as e:
+            logging.warning(f"Failed to fetch RainViewer API: {e}")
+        time.sleep(300)
+
+threading.Thread(target=poll_rainviewer, daemon=True).start()
+
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "config"))
+import config
+
 import alert_dispatcher
 from data_fusion import generate_insat_satellite_ctt, generate_lightning_density_grid, compute_fused_convective_hazard_index
 
@@ -55,21 +81,8 @@ RADAR_COLORS = [
 ]
 IMD_VIVID_CMAP = LinearSegmentedColormap.from_list("imd_vivid", [(pos, col) for pos, col in RADAR_COLORS], N=512)
 
-REGIONS = {
-    "delhi_ncr": {
-        "id": "delhi_ncr",
-        "name": "Delhi-NCR & Northern Plains",
-        "radar": "IMD Palam & Mausam Bhavan C-Band DWR",
-        "bounds": [[27.8, 76.2], [29.3, 78.2]],
-        "center": [28.55, 77.2],
-        "locations": [
-            {"name": "Delhi IGI Airport (Aviation Hub)", "type": "airport", "lat": 28.556, "lng": 77.100, "color": "#ef4444"},
-            {"name": "Gurugram CyberCity (Tech Hub)",     "type": "city",    "lat": 28.495, "lng": 77.089, "color": "#f59e0b"},
-            {"name": "Noida Sector 62 (Industrial Zone)",      "type": "city",    "lat": 28.628, "lng": 77.365, "color": "#38bdf8"},
-            {"name": "Faridabad Agri-Belt (Rural)",    "type": "agri",    "lat": 28.408, "lng": 77.317, "color": "#10b981"}
-        ]
-    }
-}
+REGIONS = config.REGIONS
+
 
 import sqlite3
 
@@ -93,6 +106,17 @@ def get_radar_data(lead_time_min: int):
     return np.zeros((600, 600))
 
 
+
+@app.get("/api/radar-tiles")
+def get_radar_tiles():
+    if not rainviewer_cache["path"]:
+        return {"status": "error", "message": "Radar path not cached yet"}
+    return {
+        "status": "success",
+        "path": rainviewer_cache["path"],
+        "template": "https://tilecache.rainviewer.com{path}/256/{z}/{x}/{y}/2/1_1.png"
+    }
+
 @app.get("/api/regions")
 def get_regions():
     return {"status": "success", "regions": REGIONS}
@@ -114,13 +138,16 @@ def get_alerts(region: str = Query("delhi_ncr")):
         latest_ts = res[0]
         cursor.execute("SELECT region, message, status, severity FROM alerts WHERE timestamp = ?", (latest_ts,))
         rows = cursor.fetchall()
+        # Filter alerts to only include those relevant to the requested region
+        location_names = [loc["name"] for loc in reg.get("locations", [])]
         for row in rows:
-            alerts.append({
-                "location": row[0],
-                "alert_message": row[1],
-                "status": row[2],
-                "severity": row[3]
-            })
+            if row[0] in location_names:
+                alerts.append({
+                    "location": row[0],
+                    "alert_message": row[1],
+                    "status": row[2],
+                    "severity": row[3]
+                })
     
     conn.close()
             
