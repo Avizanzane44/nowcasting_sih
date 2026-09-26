@@ -53,7 +53,7 @@ Post-reorganization, the codebase is structured as follows:
 Be aware of the following hackathon constraints before modifying code:
 * **Simulated Data:** Satellite (CTT) and Lightning (Density) layers are *not* real-time APIs; they are physically-informed simulations derived mathematically from the real radar data.
 * **ConvLSTM Proof-of-Concept:** The deep learning model is a PoC trained on only 40 frames. It suffers from ETA drift and hallucination on distant storms. The Optical Flow fallback is currently more robust.
-* **Storm Coverage (Alerts):** Only 3 of the 4 demo cities are actually hit by this specific 2016 historical storm. Noida correctly remains "CLEAR"—this is an honest reflection of the data.
+* **Live Multi-Zone Tracking:** All four geographic zones (Delhi-NCR, Mumbai & Western Ghats, Himalayan Belt, Northeast & Meghalaya) are actively tracked using live IMD radar streams via RainViewer. The dashboard correctly discriminates between advecting hazards, stationary convection (`NO_COHERENT_ADVECTION`), and empty skies.
 * **Countdown Demonstration:** The live countdown logic is fully implemented, but a multi-step continuous live countdown (e.g., 45 -> 40 -> 35 mins) has never been demonstrated on a genuinely approaching storm because this specific historical dataset lacks one.
 
 **Important:** Before making structural changes or questioning the data flow, please read `ARCHITECTURE.md` and `PROGRESS.md` in full. They contain the complete, honest history of what is real vs. simulated vs. PoC in this pipeline.
