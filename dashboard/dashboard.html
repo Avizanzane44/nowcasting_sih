@@ -203,10 +203,7 @@
       transition: transform 0.3s ease-out, opacity 0.3s ease-out;
     }
   </style>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
-  <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
-</head>
+      </head>
 <body class="text-slate-100 flex flex-col h-screen overflow-hidden antialiased">
   <!-- STARTUP SPLASH -->
   <div id="startup-splash" class="fixed inset-0 z-[9999] bg-[#0f172a] flex flex-col items-center justify-center transition-opacity duration-500 cursor-pointer" onclick="dismissSplash()">
@@ -236,12 +233,7 @@
   </div>
 
 
-  <!-- HUD Banner for Demo Regions -->
-  <div id="demo-banner" class="hidden absolute top-20 left-1/2 transform -translate-x-1/2 z-[1000] glass-panel px-6 py-2 rounded-full border border-amber-500/50 shadow-sm">
-    <span class="text-xs  font-bold text-amber-400 flex items-center gap-2">
-      <i data-lucide="alert-triangle" class="w-4 h-4"></i> LIVE RADAR MOSAIC (RainViewer) — High-resolution hazard fusion pending regional DWR integration.
-    </span>
-  </div>
+  
 
   <!-- Top Command Header -->
   <header class="glass-panel border-b-0 px-6 py-3 flex items-center justify-between z-[1500]">
@@ -275,9 +267,9 @@
           </button>
           <div id="region-dropdown-list" class="absolute top-full left-0 mt-1 w-full glass-card hidden flex-col z-[1600] overflow-hidden">
             <div class="px-3 py-2 cursor-pointer hover:bg-slate-700 text-xs text-slate-200 transition" onclick="selectRegion('delhi_ncr', 'Delhi-NCR (Live Active Radar)')">Delhi-NCR (Live Active Radar)</div>
-            <div class="px-3 py-2 cursor-pointer hover:bg-slate-700 text-xs text-slate-200 transition" onclick="selectRegion('himalayan_belt', 'Himalayan Belt (Demo Preset)')">Himalayan Belt (Demo Preset)</div>
-            <div class="px-3 py-2 cursor-pointer hover:bg-slate-700 text-xs text-slate-200 transition" onclick="selectRegion('mumbai_ghats', 'Mumbai & Western Ghats (Demo Preset)')">Mumbai & Western Ghats (Demo Preset)</div>
-            <div class="px-3 py-2 cursor-pointer hover:bg-slate-700 text-xs text-slate-200 transition" onclick="selectRegion('northeast_bengal', 'Northeast & Meghalaya (Demo Preset)')">Northeast & Meghalaya (Demo Preset)</div>
+            <div class="px-3 py-2 cursor-pointer hover:bg-slate-700 text-xs text-slate-200 transition" onclick="selectRegion('himalayan_belt', 'Himalayan Belt')">Himalayan Belt</div>
+            <div class="px-3 py-2 cursor-pointer hover:bg-slate-700 text-xs text-slate-200 transition" onclick="selectRegion('mumbai_ghats', 'Mumbai & Western Ghats')">Mumbai & Western Ghats</div>
+            <div class="px-3 py-2 cursor-pointer hover:bg-slate-700 text-xs text-slate-200 transition" onclick="selectRegion('northeast_bengal', 'Northeast & Meghalaya')">Northeast & Meghalaya</div>
           </div>
         </div>
       </div>
@@ -727,8 +719,8 @@
     let currentLeadTime = 0;
     let overlay = null;
     let activeMarkers = [];
-    let markerClusterGroup = L.markerClusterGroup({ maxClusterRadius: 30 });
-    map.addLayer(markerClusterGroup);
+    let markerGroup = L.featureGroup();
+    map.addLayer(markerGroup);
     let radarCircles = [];
     let rainViewerLayer = null;
     let activePolygons = [];
@@ -756,7 +748,7 @@
                     const attr = document.createElement('div');
                     attr.id = 'rv-attribution';
                     attr.className = 'absolute bottom-2 right-2 z-[1000] text-[10px] text-slate-400 bg-[#080b11]/80 px-2 py-1 rounded border border-slate-700 ';
-                    attr.innerHTML = 'Live Radar: <a href="https://rainviewer.com" target="_blank" class="text-blue-400 hover:underline">RainViewer</a>';
+                    attr.innerHTML = 'Live Radar: <a href="https://rainviewer.com" target="_blank" class="text-blue-400 hover:underline">IMD via RainViewer</a>';
                     document.getElementById('map').appendChild(attr);
                 }
                 
@@ -787,12 +779,8 @@
       currentRegion = regionId;
       applyRegion(regionId);
       
-      const banner = document.getElementById('demo-banner');
       if (regionId !== 'delhi_ncr') {
-        banner.classList.remove('hidden');
         if (overlay) { map.removeLayer(overlay); overlay = null; }
-      } else {
-        banner.classList.add('hidden');
       }
     }
 
@@ -804,7 +792,7 @@
       map.fitBounds(reg.bounds, { padding: [20, 20] });
 
       // Clean up
-      markerClusterGroup.clearLayers(); activeMarkers = [];
+      markerGroup.clearLayers(); activeMarkers = [];
       radarCircles.forEach(c => map.removeLayer(c)); radarCircles = [];
       activePolygons.forEach(p => map.removeLayer(p)); activePolygons = [];
 
@@ -925,19 +913,14 @@
 
       // Clean existing location markers (skip radar sweep & cones)
       activeMarkers = activeMarkers.filter(m => {
-        if (m.isLocationMarker) { markerClusterGroup.removeLayer(m); return false; }
+        if (m.isLocationMarker) { markerGroup.removeLayer(m); return false; }
         return true;
       });
 
       const container = document.getElementById('alerts-container');
       container.innerHTML = '';
 
-      if (currentRegion !== 'delhi_ncr') {
-        container.innerHTML = `<div class="text-center  text-amber-400 text-xs p-4 glass-card rounded-md border border-amber-500/30 mb-4">
-          LIVE RADAR MOSAIC (RainViewer) — High-resolution hazard fusion pending regional DWR integration.
-        </div>`;
-        // Do not return here, we want to render the locations below!
-      }
+
 
       reg.locations.forEach(c => {
         // Compute dynamic ETA
@@ -946,9 +929,9 @@
         let progressPct = 0;
         
         if (currentRegion !== 'delhi_ncr') {
-            badgeText = 'NO LIVE DATA';
-            badgeStatus = 'DEMO';
-            badgeColor = 'bg-slate-500/20 text-slate-400';
+            badgeText = 'LIVE RADAR (RainViewer)';
+            badgeStatus = 'LIVE';
+            badgeColor = 'bg-emerald-500/20 text-emerald-400';
             borderColor = '#64748b';
             iconColor = '#64748b';
             progressPct = 0;
@@ -1008,7 +991,7 @@
         });
 
         const marker = L.marker([c.lat, c.lng], { icon: pinIcon });
-        markerClusterGroup.addLayer(marker);
+        markerGroup.addLayer(marker);
         marker.isLocationMarker = true;
         activeMarkers.push(marker);
 
@@ -1025,9 +1008,9 @@
             </span>
           </div>
           <div class="flex gap-2">
-            <span class="text-[9px]  bg-slate-800/80 text-slate-300 px-2 py-1 rounded"><span class="font-mono">VIL: ${c.vil} kg/m²</span></span>
-            <span class="text-[9px]  bg-slate-800/80 text-slate-300 px-2 py-1 rounded"><span class="font-mono">MAX: ${c.dbz} dBZ</span></span>
-            <span class="text-[9px]  bg-slate-800/80 text-slate-300 px-2 py-1 rounded"><span class="font-mono">GUST: ${c.gust} km/h</span></span>
+            <span class="text-[9px]  bg-slate-800/80 text-slate-300 px-2 py-1 rounded"><span class="font-mono">VIL: ${currentRegion === 'delhi_ncr' ? c.vil + ' kg/m²' : 'N/A'}</span></span>
+            <span class="text-[9px]  bg-slate-800/80 text-slate-300 px-2 py-1 rounded"><span class="font-mono">MAX: ${currentRegion === 'delhi_ncr' ? c.dbz + ' dBZ' : 'N/A'}</span></span>
+            <span class="text-[9px]  bg-slate-800/80 text-slate-300 px-2 py-1 rounded"><span class="font-mono">GUST: ${currentRegion === 'delhi_ncr' ? c.gust + ' km/h' : 'N/A'}</span></span>
           </div>
           <div class="mt-2 text-[10px]  font-bold" style="color: ${borderColor}">
             STATUS: ${badgeText}
