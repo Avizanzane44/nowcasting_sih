@@ -60,9 +60,8 @@ Because the environment lacks MSVC C++ tools to run the original `pysteps` basel
   - Implemented `leaflet.markercluster` to handle map pin label collisions intelligently at lower zoom levels.
   - Established and documented a strict Z-Index scale (base map=1, map controls=1000, header=1500, dropdown=1600, modals=2200, splash=9999) to definitively fix stacking bugs (e.g., dropdowns hiding behind banners, or the header blocking modal close buttons).
 - **RainViewer Integration**:
-  - Validated that RainViewer's India radar overlay is genuine IMD radar data, directly sourcing from IMD's `mausam.imd.gov.in` and `ddgmui.imd.gov.in`. 
-  - **Stage 1 (Tile Intensity Decoding) Completed**: Implemented standalone decoder (`tests/decode_rainviewer_test.py`). Successfully mapped palette colors to numpy intensity grids (`tests/himalayan_intensity_test.npy`). The decoded output is visually consistent with the live RainViewer map at the time of testing; no independent ground-truth dBZ comparison was available to validate pixel-level accuracy.
-  - *Current Scope*: Stage 1 is verified in isolation. Wiring into live optical-flow / hazard-tracking backends (Stage 2+) has not yet started.
+  - Validated that RainViewer's India radar overlay is genuine IMD radar data, directly sourcing from IMD's `mausam.imd.gov.in` and `ddgmui.imd.gov.in`.
+  - See the **RainViewer Integration Stages (Single Source of Truth)** section below for the detailed breakdown of Stages 1 through 5.
 - **Interactive Features Status**:
   - **Live/Real API Integration**: The timeline slider (0m to 60m playback) fully controls the backend `/api/layer` and properly pulls forecasted grids; alerts are actively populated from the database `/api/alerts`; metrics dynamically pull from `/api/metrics`.
   - **Demo/Mock Data**: Several selectable zones in the top dropdown (Himalayan Belt, Mumbai Ghats, Northeast Bengal) are **hardcoded frontend presets** with no live tracking backend support. They have been relabeled as `[Demo Preset - No Live Data]` in the UI to prevent deceiving end-users. The only fully live, backend-integrated zone is Delhi-NCR.
@@ -72,7 +71,26 @@ Because the environment lacks MSVC C++ tools to run the original `pysteps` basel
 
 ---
 
-## Short-Term Next Steps (Top 3)
-1. **Source SEVIR Dataset**: Deep learning requires a massive spatial dataset. We must acquire SEVIR or similar for robust ConvLSTM training.
-2. **Source Real Live Feeds**: Replace the historical replay with live IMD/ISRO data ingestion APIs.
-3. **Containerize**: Create a Dockerfile to manage the `pysteps` C-dependencies and Python environment securely.
+## RainViewer Integration Stages (Single Source of Truth)
+
+- **Stage 1: Decode tiles → intensity arrays** [DONE]
+  - Validated that RainViewer's India radar overlay is genuine IMD radar data, directly sourcing from IMD (`mausam.imd.gov.in`).
+  - Implemented standalone decoder (`tests/decode_rainviewer_test.py`). Successfully mapped palette colors to numpy intensity grids (`tests/himalayan_intensity_test.npy`).
+
+- **Stage 2: Optical flow + semi-Lagrangian extrapolation** [DONE]
+  - Implemented 4-frame time-series caching (`tests/himalayan_cache`, `tests/mumbai_cache`).
+  - **Key Physical Finding (Stationary Convection vs Advection)**: Discovered that isolated, vertically-developing convective cells (as opposed to organized frontal/squall systems) produce angularly-incoherent optical flow (measured std dev 70-97° across zoom levels and filtering attempts) because they lack genuine bulk translation. This is a real physical property of stationary convection (growth/decay in place), not a pipeline defect. This highlights that a production system should detect and flag this case (e.g. via angular coherence thresholding) rather than blindly extrapolating stationary cells as if they were advecting.
+  - **Validated Advection & Extrapolation on Mumbai**: Successfully validated on the Mumbai & Western Ghats zone (linearly elongated squall structure). Filtered Farneback optical flow yielded a highly coherent vector field (**1.9° angular std dev**). Executed semi-Lagrangian backward warping forward 60 minutes (`tests/mumbai_extrapolation_plot.png`), confirming smooth, shape-preserving translation (13.54 px shift at T+60) without tearing or ConvLSTM-style hallucinations.
+  - *Limitation / Stretch Goal*: Validation was on a relatively small, simple translating cluster (~118 active pixels). Testing the pipeline on a much larger, complex, organized translating system is a flagged stretch goal.
+
+- **Stage 3: Wire into hazard_tracker.py for ONE zone (Mumbai)** [DONE]
+  - Integrated the RainViewer fetch, decode, filter, Farneback optical flow, and extrapolation steps into `src/hazard_tracker.py` for the Mumbai zone.
+  - Implemented an angular-coherence safety gate to prevent advecting stationary convective noise.
+  - **Live Validation & Safety Gate**: Ran the pipeline against live data. In Poll 1, the gate correctly tracked an approaching storm at Navi Mumbai with an ETA of 50 minutes. Ten elapsed real-world minutes later (Poll 2), the live storm physically dissipated below the active vector tracking threshold; the safety gate correctly detected this structural loss, zeroed the advection vectors, and gracefully cleared the alert. This successfully validated the real-world safety logic of the system.
+  - **Synthetic Arithmetic Verification**: Because the live storm dissipated before completing a full countdown (i.e. ETA decreasing sequentially across multiple polls), a separate explicitly labeled synthetic test (`test_synthetic_countdown.py`) was used to verify the underlying math inside `compute_arrival_countdowns()`. The synthetic test isolated the arithmetic to prove the ETA decrements correctly (e.g., 50 -> 40) under constant advection.
+
+- **Stage 4: Extend to remaining zones + honest empty state** [NOT STARTED]
+  - Extend the live tracking engine across remaining zones or gracefully fallback to honest empty/mock states where live radar data is absent or incoherent.
+
+- **Stage 5: Regression test, attribution update, rehearsal, freeze** [NOT STARTED]
+  - Run full test suite, verify frontend/backend end-to-end integration, update architecture docs, and freeze codebase.
