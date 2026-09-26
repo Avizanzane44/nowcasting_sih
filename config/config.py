@@ -24,10 +24,10 @@ REGIONS = {
     "himalayan_belt": {
         "id": "himalayan_belt",
         "name": "Himalayan Belt",
-        "radar": "Placeholder (No live data)",
+        "radar": "IMD via RainViewer",
         "bounds": [[29.8, 77.6], [31.0, 79.6]],
         "center": [30.4, 78.6],
-        "has_real_data": False,
+        "has_real_data": True,
         "locations": [
             {"name": "Dehradun Airport", "type": "airport", "lat": 30.189, "lng": 78.180, "color": "#ef4444", "baseEta": 45, "vil": 0, "dbz": 0, "gust": 0},
             {"name": "Shimla Tourist Hub", "type": "city", "lat": 31.104, "lng": 77.173, "color": "#f59e0b", "baseEta": 60, "vil": 0, "dbz": 0, "gust": 0},
@@ -37,10 +37,10 @@ REGIONS = {
     "mumbai_ghats": {
         "id": "mumbai_ghats",
         "name": "Mumbai & Western Ghats",
-        "radar": "Placeholder (No live data)",
+        "radar": "IMD via RainViewer",
         "bounds": [[18.5, 72.3], [19.7, 73.6]],
         "center": [19.05, 72.9],
-        "has_real_data": False,
+        "has_real_data": True,
         "locations": [
             {"name": "CSIA Mumbai", "type": "airport", "lat": 19.089, "lng": 72.865, "color": "#ef4444", "baseEta": 15, "vil": 0, "dbz": 0, "gust": 0},
             {"name": "Navi Mumbai", "type": "city", "lat": 19.033, "lng": 73.029, "color": "#f59e0b", "baseEta": 25, "vil": 0, "dbz": 0, "gust": 0},
@@ -50,10 +50,10 @@ REGIONS = {
     "northeast_bengal": {
         "id": "northeast_bengal",
         "name": "Northeast & Meghalaya",
-        "radar": "Placeholder (No live data)",
+        "radar": "IMD via RainViewer",
         "bounds": [[25.0, 91.0], [26.4, 92.6]],
         "center": [25.8, 91.8],
-        "has_real_data": False,
+        "has_real_data": True,
         "locations": [
             {"name": "Guwahati Airport", "type": "airport", "lat": 26.106, "lng": 91.585, "color": "#ef4444", "baseEta": -5, "vil": 0, "dbz": 0, "gust": 0},
             {"name": "Shillong City", "type": "city", "lat": 25.578, "lng": 91.893, "color": "#f59e0b", "baseEta": -15, "vil": 0, "dbz": 0, "gust": 0},
