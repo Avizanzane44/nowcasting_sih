@@ -64,7 +64,7 @@ Because the environment lacks MSVC C++ tools to run the original `pysteps` basel
   - See the **RainViewer Integration Stages (Single Source of Truth)** section below for the detailed breakdown of Stages 1 through 5.
 - **Interactive Features Status**:
   - **Live/Real API Integration**: The timeline slider (0m to 60m playback) fully controls the backend `/api/layer` and properly pulls forecasted grids; alerts are actively populated from the database `/api/alerts`; metrics dynamically pull from `/api/metrics`.
-  - **Demo/Mock Data**: Several selectable zones in the top dropdown (Himalayan Belt, Mumbai Ghats, Northeast Bengal) are **hardcoded frontend presets** with no live tracking backend support. They have been relabeled as `[Demo Preset - No Live Data]` in the UI to prevent deceiving end-users. The only fully live, backend-integrated zone is Delhi-NCR.
+  - **Unified Live Data Integration**: All four zones (Delhi-NCR, Himalayan Belt, Mumbai Ghats, Northeast Bengal) are fully live and backend-integrated. The dashboard accurately credits IMD (via RainViewer) for all zones.
 
 ### 7. Deployment: ❌ Not started
 - **What's missing**: No Dockerfiles, CI/CD pipelines, or cloud deployment manifests exist.
@@ -89,8 +89,11 @@ Because the environment lacks MSVC C++ tools to run the original `pysteps` basel
   - **Live Validation & Safety Gate**: Ran the pipeline against live data. In Poll 1, the gate correctly tracked an approaching storm at Navi Mumbai with an ETA of 50 minutes. Ten elapsed real-world minutes later (Poll 2), the live storm physically dissipated below the active vector tracking threshold; the safety gate correctly detected this structural loss, zeroed the advection vectors, and gracefully cleared the alert. This successfully validated the real-world safety logic of the system.
   - **Synthetic Arithmetic Verification**: Because the live storm dissipated before completing a full countdown (i.e. ETA decreasing sequentially across multiple polls), a separate explicitly labeled synthetic test (`test_synthetic_countdown.py`) was used to verify the underlying math inside `compute_arrival_countdowns()`. The synthetic test isolated the arithmetic to prove the ETA decrements correctly (e.g., 50 -> 40) under constant advection.
 
-- **Stage 4: Extend to remaining zones + honest empty state** [NOT STARTED]
-  - Extend the live tracking engine across remaining zones or gracefully fallback to honest empty/mock states where live radar data is absent or incoherent.
+- **Stage 4: Extend to remaining zones + honest empty state** [DONE]
+  - Extended the live tracking engine across all remaining zones (Delhi-NCR, Himalayan Belt, Northeast & Meghalaya) using distinct Zoom 7 coordinates to prevent tile overlap.
+  - Implemented robust unified backend status states (`CLEAR`, `NO_COHERENT_ADVECTION`, `IMMINENT_HAZARD`) based on the Farneback angular coherence metrics. Demonstrated the Himalayan Belt naturally tripping the `NO_COHERENT_ADVECTION` gate on live stationary convection.
 
-- **Stage 5: Regression test, attribution update, rehearsal, freeze** [NOT STARTED]
-  - Run full test suite, verify frontend/backend end-to-end integration, update architecture docs, and freeze codebase.
+- **Stage 5: Regression test, attribution update, rehearsal, freeze** [DONE]
+  - Deleted legacy PGM FMI code from the backend and stripped unused dependencies (pysteps, matplotlib).
+  - Passed visual browser regression across all UI features (clustering, z-index layering, region selection).
+  - Updated dashboard UI and config attribution to correctly label all zones as live IMD radar streams via RainViewer. Codebase frozen.
