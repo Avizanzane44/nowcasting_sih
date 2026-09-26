@@ -261,6 +261,14 @@ def main():
         # Write to Database
         db_storage.save_alerts_to_db(current_iso, countdowns)
         db_storage.save_storm_cells_to_db(current_iso, all_forecast_cells)
+        # Save metrics to DB
+        try:
+            with open("verification_metrics.json", "r") as mf:
+                metrics_data = json.load(mf)
+            db_storage.save_metrics_to_db(metrics_data)
+        except Exception as e:
+            print("Could not save metrics:", e)
+
 
         # Fallback flat-files for any other legacy scripts
         np.save("radar_obs.npy", obs_grid)
