@@ -34,6 +34,11 @@ The pipeline currently has the following implemented stages:
 ### Dashboard
 - **Files**: `dashboard/dashboard.html`
 - **Logic**: A Leaflet.js based web UI that visualizes the data. It renders real PySteps evaluation metrics from `/api/metrics` and updates dynamic layers through a timeline slider spanning the 60-min forecast.
+- **Visual Integration**: 
+  - Incorporates `leaflet.markercluster` for label collision management.
+  - Employs a custom `div`-based dark-themed region dropdown and a documented Z-Index scale to maintain stacking stability across modals, dropdowns, and overlays.
+  - Integrates RainViewer's public radar tile API as a visual base layer. *Important Distinction*: This data is genuine IMD radar, but redistributed as pre-rendered colored PNG composites (not native IMD Level-1/2 raw arrays).
+  - **Stage 1 Decoder Status**: Standalone decoder script (`tests/decode_rainviewer_test.py`) extracts pixel intensities into 2D numpy arrays. The values are visually consistent with the source tile color scale, but are derived from reverse-engineered palette mapping rather than calibrated Level-1/2 raw radar volumes.
 
 ### Alert Dispatch
 - **Files**: `src/alert_dispatcher.py`
