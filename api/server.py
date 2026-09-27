@@ -50,6 +50,57 @@ from data_fusion import generate_insat_satellite_ctt, generate_lightning_density
 
 app = FastAPI(title="India Convective Nowcasting Multi-Region API", version="4.0.0")
 
+import json
+
+@app.get("/api/status")
+def get_zone_status(region: str):
+    path = os.path.join(os.path.dirname(__file__), "..", f"{region}_status.json")
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            return json.load(f)
+    return {"coherence_passed": False, "active_rain_present": False, "bounds": None}
+
+@app.get("/api/layer-rainviewer/{region}/{lead_time_min}")
+def get_rainviewer_layer(region: str, lead_time_min: int):
+    # Depending on the region, we fetch the corresponding cache dir
+    cache_map = {
+        "mumbai_ghats": "mumbai_cache",
+        "himalayan_belt": "himalayan_cache",
+        "northeast_bengal": "northeast_cache",
+        "delhi_ncr": "delhi_cache"
+    }
+    cache_dir = cache_map.get(region)
+    if not cache_dir:
+        return Response(content=b"", media_type="image/png")
+        
+    npy_path = os.path.join(os.path.dirname(__file__), "..", "tests", cache_dir, f"forecast_grid_{lead_time_min}.npy")
+    if not os.path.exists(npy_path):
+        return Response(content=b"", media_type="image/png")
+        
+    grid = np.load(npy_path)
+    
+    fig, ax = plt.subplots(figsize=(8, 8), dpi=160)
+    
+    # We do NOT use a binary NumPy mask because masked_where creates sharp, blocky, 
+    # rectangular cutoffs at the edge of the 256x256 grid cells.
+    # Instead, we rely on the colormap (where 0.0 maps to (0,0,0,0) transparent)
+    # and interpolation to create smooth, organic gradients at the edges.
+    smoothed = gaussian_filter(grid, sigma=1.5)
+    ax.imshow(smoothed, cmap=IMD_VIVID_CMAP, vmin=0.0, vmax=80.0, alpha=0.92, interpolation='bilinear')
+    
+    ax.axis("off")
+    fig.patch.set_alpha(0.0)
+    ax.patch.set_alpha(0.0)
+    plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
+    plt.margins(0,0)
+    
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png", transparent=True)
+    plt.close(fig)
+    buf.seek(0)
+    return Response(content=buf.getvalue(), media_type="image/png")
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -124,6 +175,14 @@ def get_regions():
 
 @app.get("/api/alerts")
 def get_alerts(region: str = Query("delhi_ncr")):
+    if region != "delhi_ncr":
+        json_path = os.path.join(os.path.dirname(__file__), "..", f"{region}_hazard_alerts.json")
+        if os.path.exists(json_path):
+            with open(json_path, "r") as f:
+                alerts_data = json.load(f)
+            return {"data_source": "live_rainviewer", "alerts": alerts_data}
+        return {"data_source": "live_rainviewer", "alerts": []}
+
     reg = REGIONS.get(region, REGIONS["delhi_ncr"])
     
     conn = sqlite3.connect(os.path.join(os.path.dirname(__file__), "..", "data", "processed", "nowcast_data.db"))
@@ -168,9 +227,9 @@ def get_alerts(region: str = Query("delhi_ncr")):
 
 
 @app.get("/api/dispatches")
-def get_dispatches():
+def get_dispatches(region: str = "delhi_ncr"):
     dispatches = []
-    if os.path.exists("dispatched_alerts_log.json"):
+    if region == "delhi_ncr" and os.path.exists("dispatched_alerts_log.json"):
         with open("dispatched_alerts_log.json", "r", encoding="utf-8") as f:
             dispatches = json.load(f)
     return {"status": "success", "dispatches": dispatches}
@@ -211,8 +270,9 @@ def get_layer_frame(layer_name: str = "radar", lead_time_min: int = 0):
     radar_grid[~radar_horizon_mask] = 0.0
 
     if layer_name == "radar":
-        masked = np.ma.masked_where(radar_grid < 2.0, radar_grid)
-        ax.imshow(masked, cmap=IMD_VIVID_CMAP, vmin=2.0, vmax=80.0, alpha=0.92)
+        # Use colormap transparency instead of binary masking for smooth edges
+        smoothed = gaussian_filter(radar_grid, sigma=1.5)
+        ax.imshow(smoothed, cmap=IMD_VIVID_CMAP, vmin=0.0, vmax=80.0, alpha=0.92, interpolation='bilinear')
 
     elif layer_name == "satellite":
         sat_grid = generate_insat_satellite_ctt(radar_grid)
@@ -238,7 +298,7 @@ def get_layer_frame(layer_name: str = "radar", lead_time_min: int = 0):
     plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
     
     buf = io.BytesIO()
-    plt.savefig(buf, format="png", bbox_inches="tight", pad_inches=0, transparent=True)
+    plt.savefig(buf, format="png", transparent=True)
     plt.close(fig)
     buf.seek(0)
     

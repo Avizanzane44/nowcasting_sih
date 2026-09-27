@@ -76,7 +76,12 @@
       cursor: pointer;
     }
     
-    .cyber-slider::-moz-range-thumb {
+    .cyber-slider:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.cyber-slider::-moz-range-thumb {
       width: 12px;
       height: 12px;
       border-radius: 50%;
@@ -249,7 +254,7 @@
           </span>
         </div>
         <div class="text-xs text-slate-400  mt-1 flex items-center gap-3">
-          <span id="live-clock" class="text-blue-400 font-bold">--:--:-- IST</span>
+          <span id="live-clock" class="text-blue-400 font-bold tabular-nums">--:--:-- IST</span>
           <span>|</span>
           <span class="text-emerald-400">SYSTEM STATUS: OPTICAL FLOW ENGINE ONLINE [FPS: 60]</span>
         </div>
@@ -418,6 +423,12 @@
         </div>
       </div>
 
+            <div id="metrics-content-empty" class="hidden text-center py-10">
+        <div class="text-sm uppercase font-bold text-slate-400">Ground-Truth Verification Unavailable</div>
+        <div class="text-xs text-slate-500 mt-2">Awaiting local IMD Doppler radar data integration for this zone.</div>
+      </div>
+      
+      <div id="metrics-content-delhi">
       <div class="grid grid-cols-4 gap-3 mb-6">
         <div class="glass-card p-3 rounded-md text-center">
           <div class="text-[10px] uppercase  font-bold text-slate-400">CSI (Threat)</div>
@@ -718,7 +729,8 @@
     let currentLayer = 'radar';
     let currentLeadTime = 0;
     let overlay = null;
-    let activeMarkers = [];
+    let currentZoneStatus = { coherence_passed: true, active_rain_present: true, bounds: null };
+      let activeMarkers = [];
     let markerGroup = L.featureGroup();
     map.addLayer(markerGroup);
     let radarCircles = [];
@@ -784,22 +796,70 @@
       }
     }
 
-    function applyRegion(regionId) {
+    async function applyRegion(regionId) {
       const reg = DEFAULT_REGIONS[regionId];
       if (!reg) return;
 
-      document.getElementById('sidebar-region-title').innerText = `${reg.name.split(' ')[0]} Targets`;
+      // Fetch zone status for non-Delhi regions
+      if (regionId !== 'delhi_ncr') {
+        try {
+          const res = await fetch(`http://127.0.0.1:8000/api/status?region=${regionId}`);
+          currentZoneStatus = await res.json();
+          if (currentZoneStatus.bounds) {
+              reg.bounds = currentZoneStatus.bounds;
+          }
+        } catch(e) {
+          console.warn("Failed to fetch zone status");
+        }
+      } else {
+        currentZoneStatus = { coherence_passed: true, active_rain_present: true, bounds: reg.bounds };
+      }
+
+      const titleEl = document.getElementById('sidebar-region-title');
+      if (titleEl) titleEl.innerText = `${reg.name.split(' ')[0]} Targets`;
       map.fitBounds(reg.bounds, { padding: [20, 20] });
 
-      // Clean up
-      markerGroup.clearLayers(); activeMarkers = [];
+      // Handle Slider State
+      const slider_el = document.getElementById('time-slider');
+      const play_btn = document.getElementById('play-btn');
+        if (slider_el && regionId !== 'delhi_ncr' && (!currentZoneStatus.coherence_passed || !currentZoneStatus.active_rain_present)) {
+            slider_el.disabled = true;
+            if (play_btn) { play_btn.disabled = true; play_btn.style.opacity = '0.3'; play_btn.style.pointerEvents = 'none'; }
+            slider_el.value = 0;
+            currentLeadTime = 0;
+            const timeStr = "T + 0 min (Observation)";
+            const displayEl = document.getElementById('lead-time-display');
+            if (displayEl) displayEl.innerHTML = `${timeStr} &nbsp;&mdash;&nbsp; [<span class="text-blue-400">ENGINE: RainViewer Optical Flow</span>]`;
+        } else if (slider_el) {
+            slider_el.disabled = false;
+            if (play_btn) { play_btn.disabled = false; play_btn.style.opacity = '1'; play_btn.style.pointerEvents = 'auto'; }
+        }
+
+      // Clean up -- DEBUG LOGGING
+      console.group('[MARKER DEBUG] applyRegion cleanup for region:', regionId);
+      console.log('[MARKER DEBUG] activeMarkers count BEFORE clear:', activeMarkers.length);
+      activeMarkers.forEach((m, idx) => {
+        const ll = m.getLatLng ? m.getLatLng() : 'no latlng';
+        const cls = m.options && m.options.icon ? m.options.icon.options.className : 'no-icon-class';
+        const isLoc = m.isLocationMarker ? 'isLocationMarker' : 'non-location';
+        console.log(`  marker[${idx}] lat=${ll.lat} lng=${ll.lng} class="${cls}" ${isLoc}`);
+      });
+      markerGroup.clearLayers();
+      activeMarkers.forEach(m => map.removeLayer(m));
+      activeMarkers = [];
       radarCircles.forEach(c => map.removeLayer(c)); radarCircles = [];
       activePolygons.forEach(p => map.removeLayer(p)); activePolygons = [];
+      console.log('[MARKER DEBUG] activeMarkers count AFTER clear:', activeMarkers.length);
+      console.groupEnd();
 
+      if (overlay) map.removeLayer(overlay);
+      
+      let endpoint = regionId === 'delhi_ncr' ? `/api/layer/${currentLayer}/${currentLeadTime}` : `/api/layer-rainviewer/${regionId}/${currentLeadTime}`;
+      overlay = L.imageOverlay(`http://127.0.0.1:8000${endpoint}`, reg.bounds, { opacity: 0.88 }).addTo(map);
+
+      // removed rainViewerLayer.bringToBack();
+      
       if (regionId === 'delhi_ncr') {
-        if (overlay) map.removeLayer(overlay);
-        overlay = L.imageOverlay(`http://127.0.0.1:8000/api/layer/${currentLayer}/${currentLeadTime}`, reg.bounds, { opacity: 0.88 }).addTo(map);
-        if (rainViewerLayer) rainViewerLayer.bringToBack();
 
         // Sweeping radar over Palam
         const radarSweepIcon = L.divIcon({
@@ -828,6 +888,7 @@
       }
 
       renderLocations();
+      loadAlerts();
     }
 
     // Dynamic rendering of map markers and sidebar based on currentLeadTime
@@ -853,7 +914,7 @@
         container.innerHTML = '';
         
         try {
-          const res = await fetch('http://127.0.0.1:8000/api/dispatches');
+          const res = await fetch(`http://127.0.0.1:8000/api/dispatches?region=${currentRegion}`);
           const data = await res.json();
           if (!data.dispatches || data.dispatches.length === 0) {
             renderDispatches([]);
@@ -913,7 +974,12 @@
 
       // Clean existing location markers (skip radar sweep & cones)
       activeMarkers = activeMarkers.filter(m => {
-        if (m.isLocationMarker) { markerGroup.removeLayer(m); return false; }
+        if (m.isLocationMarker) {
+          const ll = m.getLatLng ? m.getLatLng() : 'no latlng';
+          console.log('[MARKER DEBUG] renderLocations removing isLocationMarker at', ll.lat, ll.lng);
+          markerGroup.removeLayer(m);
+          return false;
+        }
         return true;
       });
 
@@ -928,12 +994,26 @@
         let badgeText, badgeStatus, badgeColor, borderColor, iconColor;
         let progressPct = 0;
         
-        if (currentRegion !== 'delhi_ncr') {
-            badgeText = 'LIVE RADAR (RainViewer)';
-            badgeStatus = 'LIVE';
-            badgeColor = 'bg-emerald-500/20 text-emerald-400';
+        if (currentRegion !== 'delhi_ncr' && !currentZoneStatus.active_rain_present) {
+            badgeText = 'No active hazard';
+            badgeStatus = 'CLEAR';
+            badgeColor = 'bg-slate-500/20 text-slate-400';
             borderColor = '#64748b';
             iconColor = '#64748b';
+            progressPct = 0;
+        } else if (currentRegion !== 'delhi_ncr' && !currentZoneStatus.coherence_passed) {
+            badgeText = 'Awaiting coherent motion';
+            badgeStatus = 'NO_COHERENT_ADVECTION';
+            badgeColor = 'bg-amber-500/20 text-amber-400';
+            borderColor = '#f59e0b';
+            iconColor = '#f59e0b';
+            progressPct = 0;
+        } else if (remaining > 60) {
+            badgeText = 'Beyond 60m horizon';
+            badgeStatus = 'APPROACHING';
+            badgeColor = 'bg-slate-500/10 text-slate-400';
+            borderColor = '#94a3b8';
+            iconColor = '#94a3b8';
             progressPct = 0;
         } else if (remaining > 0) {
             badgeText = `${remaining}m ETA`;
@@ -979,7 +1059,7 @@
                 <div class="tactical-icon-box" style="background-color: ${iconColor}; border-color: ${iconColor}; ">
                   ${iconSvg}
                 </div>
-                <div class="tactical-label bg-[#080b11]/90 text-white  border border-slate-700 mt-2">
+                <div class="tactical-label bg-[#080b11]/90 text-white  border border-slate-700 mt-2" style="${(c.name.includes('Cherrapunji') || c.name.includes('Navi')) ? 'transform: translateY(22px); z-index: 10;' : ''}">
                   <span>${c.name.split(' ')[0]}</span>
                   <span style="color: ${borderColor}">• ${badgeText}</span>
                 </div>
@@ -991,6 +1071,7 @@
         });
 
         const marker = L.marker([c.lat, c.lng], { icon: pinIcon });
+        console.log('[MARKER DEBUG] renderLocations ADDING marker:', c.name, 'at', c.lat, c.lng, 'icon class: tactical-pin-wrapper');
         markerGroup.addLayer(marker);
         marker.isLocationMarker = true;
         activeMarkers.push(marker);
@@ -1045,24 +1126,29 @@
     let isPlaying = false, playInterval = null;
 
     function updateLeadTime(val) {
+      if (document.getElementById('time-slider').disabled) return;
       currentLeadTime = parseInt(val);
       slider.value = currentLeadTime;
       
       const timeStr = currentLeadTime === 0 ? "T + 0 min (Observation)" : `T + ${currentLeadTime} min Lead`;
-      display.innerHTML = `${timeStr} &nbsp;•&nbsp; [<span class="text-blue-400">ENGINE: PySteps Advective Semi-Lagrangian Flow</span>]`;
+      display.innerHTML = `${timeStr} &nbsp;&mdash;&nbsp; [<span class="text-blue-400">ENGINE: ${currentRegion === 'delhi_ncr' ? 'PySteps Advective Semi-Lagrangian Flow' : 'RainViewer Optical Flow'}</span>]`;
       
       // Leaflet Translation Effect (simulate advection on canvas)
-      if (overlay && currentRegion === 'delhi_ncr') {
-        overlay.setUrl(`http://127.0.0.1:8000/api/layer/${currentLayer}/${currentLeadTime}`);
-        // Calculate offset (storms move roughly NE)
-        const offsetLat = currentLeadTime * 0.0008;
-        const offsetLng = currentLeadTime * 0.0012;
-        const baseBounds = DEFAULT_REGIONS.delhi_ncr.bounds;
-        const newBounds = [
-          [baseBounds[0][0] + offsetLat, baseBounds[0][1] + offsetLng],
-          [baseBounds[1][0] + offsetLat, baseBounds[1][1] + offsetLng]
-        ];
-        overlay.setBounds(newBounds);
+      if (overlay) {
+        if (currentRegion === 'delhi_ncr') {
+          overlay.setUrl(`http://127.0.0.1:8000/api/layer/${currentLayer}/${currentLeadTime}`);
+          // Calculate offset (storms move roughly NE)
+          const offsetLat = currentLeadTime * 0.0008;
+          const offsetLng = currentLeadTime * 0.0012;
+          const baseBounds = DEFAULT_REGIONS.delhi_ncr.bounds;
+          const newBounds = [
+            [baseBounds[0][0] + offsetLat, baseBounds[0][1] + offsetLng],
+            [baseBounds[1][0] + offsetLat, baseBounds[1][1] + offsetLng]
+          ];
+          overlay.setBounds(newBounds);
+        } else {
+          overlay.setUrl(`http://127.0.0.1:8000/api/layer-rainviewer/${currentRegion}/${currentLeadTime}`);
+        }
       }
 
       renderLocations();
@@ -1111,7 +1197,19 @@
       else closeDispatchesModal();
     }
 
-    function toggleMetricsModal(show) { document.getElementById('metrics-modal').classList.toggle('hidden', !show); }
+    function toggleMetricsModal(show) { 
+  const modal = document.getElementById('metrics-modal');
+  if (show) {
+    if (currentRegion === 'delhi_ncr') {
+      document.getElementById('metrics-content-delhi').style.display = 'block';
+      document.getElementById('metrics-content-empty').style.display = 'none';
+    } else {
+      document.getElementById('metrics-content-delhi').style.display = 'none';
+      document.getElementById('metrics-content-empty').style.display = 'block';
+    }
+  }
+  modal.classList.toggle('hidden', !show); 
+}
 
     // Indian Standard Time (IST) Clock
     setInterval(() => {

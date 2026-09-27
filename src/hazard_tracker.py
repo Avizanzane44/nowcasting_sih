@@ -26,7 +26,7 @@ HAIL_THRESHOLD_MMH = 30.0
 # Moderate Convective Thunderstorm: >= 15 mm/h (reflectivity > 38 dBZ)
 THUNDERSTORM_THRESHOLD_MMH = 15.0 
 
-MIN_CELL_PIXELS = 15 
+MIN_CELL_PIXELS = 150 
 
 
 def classify_cell(max_intensity, area_pixels):
@@ -196,6 +196,19 @@ def decode_rainviewer_png(img_path):
         flat_decoded[i] = _color_to_dbz(p)
     return flat_decoded.reshape((h, w))
 
+
+def get_tile_bounds(zoom, x, y):
+    n = 2.0 ** zoom
+    nw_lon = x / n * 360.0 - 180.0
+    nw_lat_rad = math.atan(math.sinh(math.pi * (1 - 2 * y / n)))
+    nw_lat = math.degrees(nw_lat_rad)
+    
+    se_lon = (x + 1) / n * 360.0 - 180.0
+    se_lat_rad = math.atan(math.sinh(math.pi * (1 - 2 * (y + 1) / n)))
+    se_lat = math.degrees(se_lat_rad)
+    
+    return [[se_lat, nw_lon], [nw_lat, se_lon]]
+
 def latlng_to_tile_pixel(lat, lon, zoom, tile_x, tile_y):
     lat_rad = math.radians(lat)
     n = 2.0 ** zoom
@@ -259,7 +272,7 @@ def run_rainviewer_nowcast_for_zone(zone_id, zone_name, cache_dir, zoom, tile_x,
     mag = np.sqrt(u_active**2 + v_active**2)
     valid = mag > 0.1
     
-    if np.sum(valid) < 5:
+    if np.sum(valid) < 100:
         print("[ANGULAR COHERENCE GATE] Insufficient active storm vectors. Setting advection to stationary.")
         u_final = np.zeros_like(u_filt)
         v_final = np.zeros_like(v_filt)
@@ -281,15 +294,20 @@ def run_rainviewer_nowcast_for_zone(zone_id, zone_name, cache_dir, zoom, tile_x,
             u_final = u_filt
             v_final = v_filt
             coherence_passed = True
+
+
             
-    num_lead_times = 6
+    
+    
+    num_lead_times = 4 # for 15, 30, 45, 60
     forecast_grids = [frames[-1]]
     h, w = frames[-1].shape
     grid_x, grid_y = np.meshgrid(np.arange(w), np.arange(h))
     
     for step in range(1, num_lead_times + 1):
-        map_x = np.float32(grid_x - u_final * step)
-        map_y = np.float32(grid_y - v_final * step)
+        # u_final is per 10 mins. For 15 min steps, multiply by 1.5
+        map_x = np.float32(grid_x - u_final * (step * 1.5))
+        map_y = np.float32(grid_y - v_final * (step * 1.5))
         forecast = cv2.remap(frames[-1], map_x, map_y, 
                              interpolation=cv2.INTER_LINEAR, 
                              borderMode=cv2.BORDER_CONSTANT, 
@@ -308,12 +326,26 @@ def run_rainviewer_nowcast_for_zone(zone_id, zone_name, cache_dir, zoom, tile_x,
         lead_min = idx * 10
         forecast_cells[lead_min] = extract_storm_cells(grid, lead_min, base_time)
         
-    alerts = compute_arrival_countdowns(forecast_cells, locations, coherence_passed=coherence_passed, active_rain_present=(float(np.sum(valid)) > 0))
+    has_rain = bool(np.sum(active_mask) > MIN_CELL_PIXELS)
+    alerts = compute_arrival_countdowns(forecast_cells, locations, coherence_passed=coherence_passed, active_rain_present=has_rain)
     
+    # Save status
+    status_data = {
+        "coherence_passed": coherence_passed,
+        "active_rain_present": has_rain,
+        "bounds": get_tile_bounds(zoom, tile_x, tile_y)
+    }
+    with open(f"{zone_id}_status.json", "w") as f:
+        json.dump(status_data, f, indent=2)
+
+    # Save grids as .npy
+    for idx, grid in enumerate(forecast_grids):
+        np.save(os.path.join(cache_dir, f"forecast_grid_{idx*15}.npy"), grid)
+
     with open(f"{zone_id}_hazard_alerts.json", "w") as f:
         json.dump(alerts, f, indent=2)
         
-    with open("forecast_cells.json", "w") as f:
+    with open(f"{zone_id}_forecast_cells.json", "w") as f:
         json.dump(forecast_cells, f, indent=2)
         
     print(f"Successfully generated {zone_name} hazard alerts: {len(alerts)} locations monitored.")

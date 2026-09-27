@@ -32,11 +32,29 @@ radar_forecast.npy
 live_hazard_alerts.json
 forecast_storm_cells.json
 replay_state.json
+dispatched_alerts_log.json
+verification_metrics.json
+
+# RainViewer multi-zone pipeline runtime outputs
+*.npy
+*_status.json
+*_hazard_alerts.json
+*_forecast_cells.json
+tests/*_cache/
 
 # PyTorch Model Checkpoints & Large Weights
 *.pth
 *.pt
 *.onnx
+
+# Backups (from debugging/patching sessions)
+*.backup*
+*.backup
+
+# Node (if accidentally installed, e.g. for Playwright testing)
+node_modules/
+package.json
+package-lock.json
 
 # Temporary repair & one-off utility scripts
 fix_encoding.py
@@ -54,5 +72,3 @@ replace_remaining.py
 .DS_Store
 Thumbs.db
 desktop.ini
-
-dispatched_alerts_log.json
