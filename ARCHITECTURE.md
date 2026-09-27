@@ -14,31 +14,32 @@ The pipeline currently has the following implemented stages:
 - **Inference/Serving**: A FastAPI server loads the serialized arrays and serves them as map tile images and JSON APIs.
 - **Dashboard**: A frontend UI that visualizes the historical replay and fetches real evaluation metrics.
 
-## 2. Pipeline Stages & Implementation
+## 2. Pipeline Stages & Implementation (Dual Architecture)
 
-### Data Ingestion & Model Daemon
-- **Files**: `run_nowcast.py`
-- **Logic**: Acts as a continuous background daemon. Uses `pysteps.io` to read a rolling window of historical radar frames (`*20160928*.pgm.gz`), computes optical flow, and saves arrays (`radar_obs.npy`, `radar_forecast.npy`) and JSON alerts.
-- **Status**: Live streaming is simulated via a "Historical Replay" loop.
+The system currently runs two parallel, distinct pipelines serving different regions by intentional design.
 
-### Preprocessing & Fusion
-- **Files**: `src/data_fusion.py` (logic), `api/server.py` (execution)
-- **Logic**: Applies mathematical transformations (`generate_insat_satellite_ctt`, `generate_lightning_density_grid`) on the real radar grid to artificially generate satellite Cloud Top Temperature (CTT) and lightning density. 
-- **Status**: Completely stubbed/mocked for satellite and lightning data, but clearly labeled as "Simulated" in the API and UI.
+### Architecture A: Live RainViewer Pipeline (Mumbai, Himalayan Belt, Northeast)
+- **Files**: src/hazard_tracker.py
+- **Logic**: Acts as a live pipeline polling RainViewer's API every 10 minutes.
+  - **Stage 1 (Decode)**: Downloads composite .png tiles for a region and decodes them into quantitative dBZ NumPy grids.
+  - **Stage 2 (Optical Flow)**: Computes dense optical flow (Farneback) on the decoded reflectivity grids to extract motion vectors.
+  - **Stage 3 (Extrapolate)**: Advects the current grid forward in time using OpenCV 
+emap to generate a 60-min forecast.
+  - **Stage 4 (Hazard Generation)**: Employs a three-state model (CLEAR / NO_COHERENT_ADVECTION / IMMINENT_HAZARD). Saves outputs as .npy cache files and JSON alerts.
+
+### Architecture B: Legacy Historical Replay Pipeline (Delhi-NCR)
+- **Files**: 
+un_nowcast.py
+- **Logic**: The original, extensively-tested baseline pipeline. Acts as a continuous background daemon reading historical .pgm.gz radar files. Uses pysteps for Lucas-Kanade optical flow extrapolation.
+- **Storage/IPC**: Forecasts, hazard alerts, storm cells, and metrics are saved to a SQLite database (data/processed/nowcast_data.db) using Python UDFs to simulate SpatiaLite (ST_Intersects). 
 
 ### Inference / Serving
-- **Files**: `api/server.py`
-- **Logic**: A FastAPI server that exposes `/api/layer`, `/api/alerts`, `/api/metrics`, and `/api/dispatches`.
-- **Status**: It successfully decouples from the heavy processing by reading the `.npy` files written by the daemon. Returns `"data_source": "historical_replay"` to be fully transparent.
+- **Files**: pi/server.py
+- **Logic**: A FastAPI server that exposes /api/layer, /api/layer-rainviewer, /api/alerts, and /api/status. The server intelligently routes API requests to the appropriate backend architecture based on the region. It dynamically applies Gaussian smoothing (sigma=1.5) and bilinear interpolation to the raw RainViewer grids to cleanly map alpha gradients and hide raw data anomalies.
 
 ### Dashboard
-- **Files**: `dashboard/dashboard.html`
-- **Logic**: A Leaflet.js based web UI that visualizes the data. It renders real PySteps evaluation metrics from `/api/metrics` and updates dynamic layers through a timeline slider spanning the 60-min forecast.
-- **Visual Integration**: 
-  - Incorporates `leaflet.markercluster` for label collision management.
-  - Employs a custom `div`-based dark-themed region dropdown and a documented Z-Index scale to maintain stacking stability across modals, dropdowns, and overlays.
-  - Integrates RainViewer's public radar tile API as a visual base layer. *Important Distinction*: This data is genuine IMD radar, but redistributed as pre-rendered colored PNG composites (not native IMD Level-1/2 raw arrays).
-  - **Stage 1 Decoder Status**: Standalone decoder script (`tests/decode_rainviewer_test.py`) extracts pixel intensities into 2D numpy arrays. The values are visually consistent with the source tile color scale, but are derived from reverse-engineered palette mapping rather than calibrated Level-1/2 raw radar volumes.
+- **Files**: dashboard/dashboard.html
+- **Logic**: A Leaflet.js based web UI that seamlessly integrates both pipelines. Delhi-NCR hits the legacy API paths (/api/layer), while the other three zones dynamically hit the live paths (/api/layer-rainviewer). Both architectures flow into the same UI components.
 
 ### Alert Dispatch
 - **Files**: `src/alert_dispatcher.py`
@@ -46,27 +47,34 @@ The pipeline currently has the following implemented stages:
 
 ## 3. Data Flow Diagram
 
-```mermaid
+`mermaid
 flowchart TD
-    subgraph Offline_Historical_Daemon
+    subgraph Architecture_B_Legacy
         A[data/raw/radar/pysteps_data / .pgm.gz] --> B(run_nowcast.py Daemon)
-        B -->|--model optical_flow| C1[PySteps Lucas-Kanade]
-        B -->|--model convlstm| C2[PyTorch Seq2Seq ConvLSTM]
-        C1 --> C[(nowcast_data.db SQLite)]
-        C2 --> C
+        B --> C[(nowcast_data.db SQLite)]
+        B --> D[.npy grids]
+    end
+
+    subgraph Architecture_A_Live
+        R1[RainViewer API .png] --> H(src/hazard_tracker.py)
+        H --> H1[Decode dBZ] --> H2[Farneback Flow] --> H3[Extrapolate]
+        H3 --> J1[.npy grids]
+        H3 --> J2[.json status/alerts]
     end
 
     subgraph API_Serving
         C --> E(api/server.py)
-        F(src/evaluate_metrics.py) -.->|Calculates Metrics| C
-        
-        E -.->|Applies Fusion Logic| H(src/data_fusion.py functions)
+        D --> E
+        J1 --> E
+        J2 --> E
     end
 
     subgraph Web_Dashboard
         E --> I[dashboard.html UI]
+        I -.->|Delhi-NCR| Architecture_B_Legacy
+        I -.->|Other Zones| Architecture_A_Live
     end
-```
+`
 
 ## 4. Actual External Dependencies
 
