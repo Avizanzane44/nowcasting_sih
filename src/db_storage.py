@@ -5,6 +5,7 @@ import io
 import time
 
 import os
+import datetime
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "processed", "nowcast_data.db")
 
 def get_connection(retries=5, delay=0.5):
@@ -31,7 +32,7 @@ def execute_with_retry(func):
             try:
                 return func(*args, **kwargs)
             except sqlite3.OperationalError as e:
-                if "disk I/O error" in str(e) or "database is locked" in str(e):
+                if "disk I/O error" in str(e) or "database is locked" in str(e) or "readonly database" in str(e):
                     if attempt < retries - 1:
                         time.sleep(0.5)
                         continue
@@ -76,6 +77,9 @@ def init_db():
     )
     ''')
 
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_storm_cells_ts ON storm_cells (timestamp);")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_alerts_ts ON alerts (timestamp);")
+
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS metrics (
         id INTEGER PRIMARY KEY,
@@ -111,6 +115,7 @@ def save_grid_to_db(timestamp, lead_time_min, grid_array):
     conn.close()
 
 @execute_with_retry
+@execute_with_retry
 def save_alerts_to_db(timestamp, alerts):
     conn = get_connection()
     cursor = conn.cursor()
@@ -143,3 +148,27 @@ def save_storm_cells_to_db(timestamp, all_cells):
 if __name__ == "__main__":
     init_db()
     print("Database initialized.")
+
+@execute_with_retry
+def prune_old_data(keep_frames=10):
+    if os.path.exists(DB_PATH) and os.path.getsize(DB_PATH) > 5 * 1024**3:
+        print(f"\n[WARNING] DB is {os.path.getsize(DB_PATH) / 1024**3:.2f} GB! Delete data/processed/nowcast_data.db* and restart. Skipping prune.\n")
+        return
+        
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    # Keep only most recent N distinct timestamps in radar_grids
+    cursor.execute("SELECT DISTINCT timestamp FROM radar_grids ORDER BY timestamp DESC LIMIT ?", (keep_frames,))
+    rows = cursor.fetchall()
+    if rows:
+        oldest_keep_ts = rows[-1][0]
+        cursor.execute("DELETE FROM radar_grids WHERE timestamp < ?", (oldest_keep_ts,))
+        cursor.execute("DELETE FROM storm_cells WHERE timestamp < ?", (oldest_keep_ts,))
+        
+    # Delete alerts older than 1 day
+    one_day_ago = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=1)).isoformat()
+    cursor.execute("DELETE FROM alerts WHERE timestamp < ?", (one_day_ago,))
+    
+    conn.commit()
+    conn.close()
