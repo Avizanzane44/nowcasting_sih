@@ -74,6 +74,8 @@ def format_agri_farmer_sms(alert):
         f"• एडवाइजरी: खेतों में तुरंत सुरक्षित आश्रय लें, पेड़ों और बिजली के खंभों से दूर रहें। फसल तिरपाल से ढकें।"
     )
 
+LAST_DISPATCH = {}
+COOLDOWN_MINUTES = 30
 
 def run_alert_dispatch():
     """Reads live hazard alerts and dispatches multi-channel protocols."""
@@ -92,8 +94,11 @@ def run_alert_dispatch():
     print("=======================================================\n")
 
     for alert in alerts:
-        # Trigger immediate dispatch if hazard is imminent (ETA <= 30 mins) or CRITICAL/HIGH
-        if alert.get("status") == config.ALERT_THRESHOLDS["IMMINENT_HAZARD_STATUS"] and (alert.get("eta_minutes", 60) <= config.ALERT_THRESHOLDS["ETA_MINUTES_MAX"] or alert.get("severity") in config.ALERT_THRESHOLDS["SEVERE_LEVELS"]):
+        
+        eta = alert.get("eta_minutes")
+        if eta is None: eta = 60
+        
+        if alert.get("status") == config.ALERT_THRESHOLDS["IMMINENT_HAZARD_STATUS"] and (eta <= config.ALERT_THRESHOLDS["ETA_MINUTES_MAX"] or alert.get("severity") in config.ALERT_THRESHOLDS["SEVERE_LEVELS"]):
             loc = alert["location"]
             
             # Select target channel based on location category
@@ -119,9 +124,25 @@ def run_alert_dispatch():
                 "status": "DISPATCHED"
             }
 
+            # ALWAYS add to the dashboard log array so it remains visible
             dispatches.append(dispatch_record)
+            
+            # Cooldown / Escalation Logic for external messaging (Telegram/SMS)
+            sev_str = str(alert.get("severity", "")).upper()
+            severity_level = 4 if "CRITICAL" in sev_str else 3 if "HIGH" in sev_str else 2 if "MODERATE" in sev_str else 1
+            
+            last_record = LAST_DISPATCH.get(loc)
+            now = datetime.datetime.now(datetime.timezone.utc)
+            if last_record:
+                time_since = (now - last_record["time"]).total_seconds() / 60.0
+                old_sev = last_record["severity_level"]
+                
+                if time_since < COOLDOWN_MINUTES and severity_level <= old_sev:
+                    continue # Skip sending the external alert unless escalated or cooldown expired
+                    
+            LAST_DISPATCH[loc] = {"time": now, "severity_level": severity_level}
 
-            # Print to operations log
+            # Print to operations log only if we are actually firing a new external dispatch
             print(f"[{channel}] --> Dispatched to {loc}:")
             print(msg.encode('cp1252', errors='replace').decode('cp1252'))
             print("-" * 55 + "\n")
