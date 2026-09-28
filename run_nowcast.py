@@ -177,6 +177,10 @@ def main():
     n_leadtimes = 12
     print(f"Found {len(gz_files)} historical radar frames. Starting replay...")
 
+    sys.path.append('src')
+    import db_storage
+    db_storage.prune_old_data(keep_frames=10)
+
     # Loop through historical data, simulating a live feed
     i = 2
     frames_processed = 0
@@ -243,24 +247,32 @@ def main():
         import db_storage
         current_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
         
-        # Save grids to DB
-        db_storage.save_grid_to_db(current_iso, 0, obs_grid)
-        for step_idx in range(n_leadtimes):
-            lead_min = (step_idx + 1) * 5
-            db_storage.save_grid_to_db(current_iso, lead_min, R_forecast[step_idx])
+        try:
+            # Save grids to DB
+            db_storage.save_grid_to_db(current_iso, 0, obs_grid)
+            for step_idx in range(n_leadtimes):
+                lead_min = (step_idx + 1) * 5
+                db_storage.save_grid_to_db(current_iso, lead_min, R_forecast[step_idx])
 
-        # Hazard Tracking
-        base_time = datetime.datetime.fromisoformat(current_iso)
-        all_forecast_cells = {0: extract_storm_cells(obs_grid, 0, base_time)}
-        for step_idx in range(n_leadtimes):
-            lead_min = (step_idx + 1) * 5
-            all_forecast_cells[lead_min] = extract_storm_cells(R_forecast[step_idx], lead_min, base_time)
+            # Hazard Tracking
+            base_time = datetime.datetime.fromisoformat(current_iso)
+            all_forecast_cells = {0: extract_storm_cells(obs_grid, 0, base_time)}
+            for step_idx in range(n_leadtimes):
+                lead_min = (step_idx + 1) * 5
+                all_forecast_cells[lead_min] = extract_storm_cells(R_forecast[step_idx], lead_min, base_time)
 
-        countdowns = compute_arrival_countdowns(obs_grid, R_forecast, all_forecast_cells, MONITORED_CITIES, base_time)
+            countdowns = compute_arrival_countdowns(obs_grid, R_forecast, all_forecast_cells, MONITORED_CITIES, base_time)
 
-        # Write to Database
-        db_storage.save_alerts_to_db(current_iso, countdowns)
-        db_storage.save_storm_cells_to_db(current_iso, all_forecast_cells)
+            # Write to Database
+            db_storage.save_alerts_to_db(current_iso, countdowns)
+            db_storage.save_storm_cells_to_db(current_iso, all_forecast_cells)
+            
+        except sqlite3.OperationalError as e:
+            print(f"[{current_iso}] Database error: {e}. Retrying next frame.")
+            time.sleep(1)
+            i += 1
+            frames_processed += 1
+            continue
         # Save metrics to DB
         try:
             with open("verification_metrics.json", "r") as mf:
@@ -286,6 +298,10 @@ def main():
 
         # Trigger dispatcher
         alert_dispatcher.run_alert_dispatch()
+
+        # Prune database every 20 frames to prevent uncontrolled growth
+        if frames_processed > 0 and frames_processed % 20 == 0:
+            db_storage.prune_old_data(keep_frames=10)
 
         print(f"[{current_iso}] Database updated for frame {i}. Sleeping for 1 second...")
         time.sleep(1)
