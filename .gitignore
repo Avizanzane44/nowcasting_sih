@@ -72,3 +72,6 @@ replace_remaining.py
 .DS_Store
 Thumbs.db
 desktop.ini
+
+tests/calibration_out/
+*.pre_calibration

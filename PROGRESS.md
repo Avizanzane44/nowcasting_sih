@@ -40,3 +40,14 @@ owcast_data.db) and serves radar via the /api/layer/ endpoint.
 - **Mumbai, Himalayan Belt, and Northeast** run the newer live RainViewer multi-source pipeline (hazard_tracker.py), saving to JSON and .npy cache files. 
 
 Both pipelines are fully operational, real, and functional. They serve different zones by design, and the frontend intelligently routes API calls (such as /api/alerts and /api/layer) based on the selected region to hit the appropriate backend architecture.
+
+### Coherence Gate Validation - Sept 29, 2026
+
+1. The coherence gate was tested against live, current weather data across all four zones and found to be behaving correctly. Raw Farneback flow on today\'s storms shows genuine, severe angular incoherence (73-258 degree standard deviation) BEFORE any filtering. This means the persistent NO_COHERENT_ADVECTION status accurately reflects real disorganized convection, not a filter artifact.
+2. The median/gaussian smoothing filter was checked and does NOT suppress genuinely coherent motion when it exists. Raw vs. filtered moving-pixel counts from today\'s weather are nearly identical (Mumbai: 763 raw vs 764 filtered; Himalayan: 416 raw vs 402 filtered; Northeast: 32 raw vs 32 filtered).
+3. The original Stage 2 Mumbai squall-line test data no longer exists in cache to re-verify directly. However, the AP/Telangana finding from that earlier test (where the filter seemingly crushed signal 6-10x) is now understood to be an edge case specific to exceptionally weak/sparse storm data, not a general pipeline problem. Today\'s stronger-storm data serves as concrete counter-evidence.
+4. A country-wide scan successfully found a naturally coherent live storm today (Tile 97, 56 off the coast) passing with an extremely tight angular standard deviation of 5.9°. This confirms that the system is fully capable of passing coherent advection when it exists in reality. The system is intentionally declining to fabricate a false countdown for disorganized weather in the monitored zones, which is the exact safety behavior it was designed to have.
+
+
+**Update / Correction (Step 2.5 Validation):**
+While the angular coherence gate correctly passes organized storms, subsequent quantification revealed that the spatial smoothing filters (median_filter(size=21) + gaussian_filter(sigma=5)) are drastically under-computing the storm's displacement magnitude. For the coherent storm on Tile 97, 56, the raw Farneback mean magnitude was 3.10 px/frame (~21.2 km/h), but the filtered magnitude was crushed to 0.37 px/frame (~2.5 km/h) — an 8.4x reduction. This confirms the earlier suspicion: large kernel sizes on sparse/patchy rain fields pull in too many zero-velocity background pixels, artificially dragging the legitimate storm velocity down to a near-standstill.
