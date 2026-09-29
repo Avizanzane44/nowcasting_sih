@@ -218,7 +218,7 @@ def latlng_to_tile_pixel(lat, lon, zoom, tile_x, tile_y):
     pixel_y = int(global_y - tile_y * 256)
     return pixel_x, pixel_y
 
-def run_rainviewer_nowcast_for_zone(zone_id, zone_name, cache_dir, zoom, tile_x, tile_y, locations, max_angular_std_dev=40.0):
+def run_rainviewer_nowcast_for_zone(zone_id, zone_name, cache_dir, zoom, tile_x, tile_y, locations, max_angular_std_dev=30.0):
     """
     Runs the complete RainViewer live nowcasting engine for a given zone.
     Includes: Fetch -> Decode -> Farneback Motion -> Spatial Filtering -> Angular Coherence Gate -> Extrapolation -> Alert Dispatch.
@@ -262,8 +262,8 @@ def run_rainviewer_nowcast_for_zone(zone_id, zone_name, cache_dir, zoom, tile_x,
     u_raw = flow[:, :, 0]
     v_raw = flow[:, :, 1]
     
-    u_filt = gaussian_filter(median_filter(u_raw, size=21), sigma=5)
-    v_filt = gaussian_filter(median_filter(v_raw, size=21), sigma=5)
+    u_filt = gaussian_filter(median_filter(u_raw, size=3), sigma=1)
+    v_filt = gaussian_filter(median_filter(v_raw, size=3), sigma=1)
     
     # Angular Coherence Gate Check
     active_mask = frames[-2] > 0
@@ -291,8 +291,10 @@ def run_rainviewer_nowcast_for_zone(zone_id, zone_name, cache_dir, zoom, tile_x,
             coherence_passed = False
         else:
             print(f"[OK] [ANGULAR COHERENCE GATE PASSED] Coherent advection locked. Moving at {c_mean:.1f} deg.")
-            u_final = u_filt
-            v_final = v_filt
+            mean_u = np.mean(u_active[valid])
+            mean_v = np.mean(v_active[valid])
+            u_final = np.full_like(u_filt, mean_u)
+            v_final = np.full_like(v_filt, mean_v)
             coherence_passed = True
 
 
@@ -384,3 +386,5 @@ if __name__ == "__main__":
         {"name": "Cherrapunji Agri", "lat": 25.270, "lng": 91.732}
     ]
     run_rainviewer_nowcast_for_zone("northeast_bengal", "Northeast & Meghalaya", "tests/northeast_cache", 7, 96, 54, northeast_locations)
+
+
