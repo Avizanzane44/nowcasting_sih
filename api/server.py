@@ -123,11 +123,15 @@ def get_rainviewer_layer(region: str, lead_time_min: int):
     }
     cache_dir = cache_map.get(region)
     if not cache_dir:
-        return Response(content=b"", media_type="image/png")
+        # Return a valid 1x1 transparent PNG instead of 0 bytes to prevent broken image icons
+        transparent_1x1 = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+        return Response(content=transparent_1x1, media_type="image/png")
         
     npy_path = os.path.join(os.path.dirname(__file__), "..", "tests", cache_dir, f"forecast_grid_{lead_time_min}.npy")
     if not os.path.exists(npy_path):
-        return Response(content=b"", media_type="image/png")
+        # Return a valid 1x1 transparent PNG instead of 0 bytes to prevent broken image icons
+        transparent_1x1 = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+        return Response(content=transparent_1x1, media_type="image/png")
         
     grid = np.load(npy_path)
     
