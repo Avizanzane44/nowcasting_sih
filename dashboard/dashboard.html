@@ -1223,7 +1223,44 @@
     applyRegion('delhi_ncr');
     loadAlerts();
     setInterval(loadAlerts, 10000);
-  
+
+    // Auto-refresh RainViewer zones if they were opened during a cold-start (transparent PNG phase)
+    async function pollZoneStatus() {
+      if (currentRegion === 'delhi_ncr') return;
+      const slider_el = document.getElementById('time-slider');
+      // Only poll if the UI is currently in a disabled state (meaning cache wasn't ready)
+      if (slider_el && slider_el.disabled) {
+        try {
+          const res = await fetch(`/api/status?region=${currentRegion}`);
+          const status = await res.json();
+          if (status.bounds) {
+            currentZoneStatus = status;
+            DEFAULT_REGIONS[currentRegion].bounds = status.bounds;
+            
+            // Re-enable UI only if there's actually rain to animate
+            if (status.coherence_passed && status.active_rain_present) {
+              slider_el.disabled = false;
+              const play_btn = document.getElementById('play-btn');
+              if (play_btn) { play_btn.disabled = false; play_btn.style.opacity = '1'; play_btn.style.pointerEvents = 'auto'; }
+              
+              const displayEl = document.getElementById('lead-time-display');
+              if (displayEl) {
+                const timeStr = currentLeadTime === 0 ? "T + 0 min (Observation)" : `T + ${currentLeadTime} min Lead`;
+                displayEl.innerHTML = `${timeStr} &nbsp;&mdash;&nbsp; [<span class="text-blue-400">ENGINE: RainViewer Optical Flow</span>]`;
+              }
+            }
+            
+            // Force Leaflet to re-fetch the image, bypassing browser cache with a timestamp
+            if (overlay) {
+              const endpoint = `/api/layer-rainviewer/${currentRegion}/${currentLeadTime}`;
+              overlay.setUrl(`${endpoint}?t=${new Date().getTime()}`);
+            }
+          }
+        } catch(e) {}
+      }
+    }
+    setInterval(pollZoneStatus, 10000);
+
     function toggleDropdown() {
       document.getElementById('region-dropdown-list').classList.toggle('hidden');
     }
