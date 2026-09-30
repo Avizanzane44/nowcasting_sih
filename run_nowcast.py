@@ -303,8 +303,13 @@ def main():
         if frames_processed > 0 and frames_processed % 20 == 0:
             db_storage.prune_old_data(keep_frames=10)
 
-        print(f"[{current_iso}] Database updated for frame {i}. Sleeping for 1 second...")
-        time.sleep(1)
+        import psutil
+        process = psutil.Process(os.getpid())
+        mem_mb = process.memory_info().rss / 1024 / 1024
+        print(f"[MEMORY] Daemon RSS (run_nowcast): {mem_mb:.1f} MB")
+
+        print(f"[{current_iso}] Database updated for frame {i}. Sleeping for 180 seconds...")
+        time.sleep(180)
         i += 1
         frames_processed += 1
 

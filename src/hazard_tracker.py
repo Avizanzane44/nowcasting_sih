@@ -354,37 +354,56 @@ def run_rainviewer_nowcast_for_zone(zone_id, zone_name, cache_dir, zoom, tile_x,
     return alerts, forecast_cells, coherence_passed
 
 if __name__ == "__main__":
-    # Run Delhi-NCR
+    import time
+    import psutil
+    import os
+
     delhi_locations = [
         {"name": "Delhi IGI Airport (Aviation Hub)", "lat": 28.556, "lng": 77.100},
         {"name": "Gurugram CyberCity (Tech Hub)", "lat": 28.495, "lng": 77.089},
         {"name": "Noida Sector 62 (Industrial Zone)", "lat": 28.628, "lng": 77.365},
         {"name": "Faridabad Agri-Belt (Rural)", "lat": 28.408, "lng": 77.317}
     ]
-    run_rainviewer_nowcast_for_zone("delhi_ncr", "Delhi-NCR", "tests/delhi_cache", 7, 91, 53, delhi_locations)
-    
-    # Run Mumbai
     mumbai_locations = [
         {"name": "CSIA Mumbai", "lat": 19.089, "lng": 72.865},
         {"name": "Navi Mumbai", "lat": 19.033, "lng": 73.029},
         {"name": "Lonavala Ghats", "lat": 18.748, "lng": 73.405}
     ]
-    run_rainviewer_nowcast_for_zone("mumbai_ghats", "Mumbai & Western Ghats", "tests/mumbai_cache", 7, 89, 57, mumbai_locations)
-    
-    # Run Himalayan Belt
     himalaya_locations = [
         {"name": "Dehradun Airport", "lat": 30.189, "lng": 78.180},
         {"name": "Shimla Tourist Hub", "lat": 31.104, "lng": 77.173},
         {"name": "Uttarkashi Agri", "lat": 30.726, "lng": 78.435}
     ]
-    run_rainviewer_nowcast_for_zone("himalayan_belt", "Himalayan Belt", "tests/himalayan_cache", 7, 91, 52, himalaya_locations)
-    
-    # Run Northeast & Meghalaya
     northeast_locations = [
         {"name": "Guwahati Airport", "lat": 26.106, "lng": 91.585},
         {"name": "Shillong City", "lat": 25.578, "lng": 91.893},
         {"name": "Cherrapunji Agri", "lat": 25.270, "lng": 91.732}
     ]
-    run_rainviewer_nowcast_for_zone("northeast_bengal", "Northeast & Meghalaya", "tests/northeast_cache", 7, 96, 54, northeast_locations)
+
+    zones = [
+        ("delhi_ncr", "Delhi-NCR", "tests/delhi_cache", 7, 91, 53, delhi_locations),
+        ("mumbai_ghats", "Mumbai & Western Ghats", "tests/mumbai_cache", 7, 89, 57, mumbai_locations),
+        ("himalayan_belt", "Himalayan Belt", "tests/himalayan_cache", 7, 91, 52, himalaya_locations),
+        ("northeast_bengal", "Northeast & Meghalaya", "tests/northeast_cache", 7, 96, 54, northeast_locations)
+    ]
+
+    idx = 0
+    while True:
+        zone_args = zones[idx]
+        zone_id = zone_args[0]
+        print(f"\n--- Processing Zone: {zone_id} ---")
+        
+        try:
+            run_rainviewer_nowcast_for_zone(*zone_args)
+        except Exception as e:
+            print(f"Error processing zone {zone_id}: {e}")
+
+        process = psutil.Process(os.getpid())
+        mem_mb = process.memory_info().rss / 1024 / 1024
+        print(f"[MEMORY] Daemon RSS after {zone_id}: {mem_mb:.1f} MB")
+
+        idx = (idx + 1) % len(zones)
+        print("Sleeping for 3 minutes before next zone...")
+        time.sleep(180)
 
 

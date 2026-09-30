@@ -50,6 +50,16 @@ from data_fusion import generate_insat_satellite_ctt, generate_lightning_density
 
 app = FastAPI(title="India Convective Nowcasting Multi-Region API", version="4.0.0")
 
+import psutil
+
+@app.middleware("http")
+async def memory_logging_middleware(request, call_next):
+    response = await call_next(request)
+    process = psutil.Process(os.getpid())
+    mem_mb = process.memory_info().rss / 1024 / 1024
+    print(f"[MEMORY] API {request.url.path} RSS: {mem_mb:.1f} MB")
+    return response
+
 import json
 
 @app.get("/api/status")
@@ -79,7 +89,7 @@ def get_rainviewer_layer(region: str, lead_time_min: int):
         
     grid = np.load(npy_path)
     
-    fig, ax = plt.subplots(figsize=(8, 8), dpi=160)
+    fig, ax = plt.subplots(figsize=(8, 8), dpi=100)
     
     # We do NOT use a binary NumPy mask because masked_where creates sharp, blocky, 
     # rectangular cutoffs at the edge of the 256x256 grid cells.
@@ -256,7 +266,7 @@ def get_metrics():
 @app.get("/api/layer/{layer_name}")
 @app.get("/api/layer/{layer_name}/{lead_time_min}")
 def get_layer_frame(layer_name: str = "radar", lead_time_min: int = 0):
-    fig, ax = plt.subplots(figsize=(8, 8), dpi=160)
+    fig, ax = plt.subplots(figsize=(8, 8), dpi=100)
     
     # Load actual radar grid from disk (historical replay)
     radar_grid = get_radar_data(lead_time_min)
