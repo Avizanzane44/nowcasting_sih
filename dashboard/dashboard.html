@@ -741,7 +741,7 @@
     
     async function initRainViewer() {
         try {
-            const res = await fetch('http://127.0.0.1:8000/api/radar-tiles');
+            const res = await fetch('/api/radar-tiles');
             const data = await res.json();
             if (data.status === 'success' && data.path) {
                 if (rainViewerLayer) {
@@ -804,7 +804,7 @@
       // Fetch zone status for non-Delhi regions
       if (regionId !== 'delhi_ncr') {
         try {
-          const res = await fetch(`http://127.0.0.1:8000/api/status?region=${regionId}`);
+          const res = await fetch(`/api/status?region=${regionId}`);
           currentZoneStatus = await res.json();
           if (currentZoneStatus.bounds) {
               reg.bounds = currentZoneStatus.bounds;
@@ -856,7 +856,7 @@
       if (overlay) map.removeLayer(overlay);
       
       let endpoint = regionId === 'delhi_ncr' ? `/api/layer/${currentLayer}/${currentLeadTime}` : `/api/layer-rainviewer/${regionId}/${currentLeadTime}`;
-      overlay = L.imageOverlay(`http://127.0.0.1:8000${endpoint}`, reg.bounds, { opacity: 0.88 }).addTo(map);
+      overlay = L.imageOverlay(`${endpoint}`, reg.bounds, { opacity: 0.88 }).addTo(map);
 
       // removed rainViewerLayer.bringToBack();
       
@@ -896,7 +896,7 @@
     async function loadAlerts() {
       if (currentRegion !== 'delhi_ncr') return;
       try {
-        const res = await fetch(`http://127.0.0.1:8000/api/alerts?region=${currentRegion}`);
+        const res = await fetch(`/api/alerts?region=${currentRegion}`);
         const data = await res.json();
         const titleBadge = document.getElementById('sidebar-region-title');
         if (data.data_source === "historical_replay") {
@@ -915,7 +915,7 @@
         container.innerHTML = '';
         
         try {
-          const res = await fetch(`http://127.0.0.1:8000/api/dispatches?region=${currentRegion}`);
+          const res = await fetch(`/api/dispatches?region=${currentRegion}`);
           const data = await res.json();
           if (!data.dispatches || data.dispatches.length === 0) {
             renderDispatches([]);
@@ -1113,7 +1113,7 @@
       document.getElementById(`btn-${layerName}`).className = 'cyber-pill active px-3 py-1.5 rounded-lg flex items-center gap-1.5';
       
       if (overlay && currentRegion === 'delhi_ncr') {
-        overlay.setUrl(`http://127.0.0.1:8000/api/layer/${currentLayer}/${currentLeadTime}`);
+        overlay.setUrl(`/api/layer/${currentLayer}/${currentLeadTime}`);
       }
     }
 
@@ -1137,7 +1137,7 @@
       // Leaflet Translation Effect (simulate advection on canvas)
       if (overlay) {
         if (currentRegion === 'delhi_ncr') {
-          overlay.setUrl(`http://127.0.0.1:8000/api/layer/${currentLayer}/${currentLeadTime}`);
+          overlay.setUrl(`/api/layer/${currentLayer}/${currentLeadTime}`);
           // Calculate offset (storms move roughly NE)
           const offsetLat = currentLeadTime * 0.0008;
           const offsetLng = currentLeadTime * 0.0012;
@@ -1148,7 +1148,7 @@
           ];
           overlay.setBounds(newBounds);
         } else {
-          overlay.setUrl(`http://127.0.0.1:8000/api/layer-rainviewer/${currentRegion}/${currentLeadTime}`);
+          overlay.setUrl(`/api/layer-rainviewer/${currentRegion}/${currentLeadTime}`);
         }
       }
 
