@@ -137,7 +137,7 @@ def main():
                         help="Nowcasting model to use")
     parser.add_argument("--frames", type=int, default=None, 
                         help="Number of frames to process before exiting (default: infinite loop)")
-    args = parser.parse_args()
+    args, _ = parser.parse_known_args()
 
     print("Initializing Real-Time Historical Replay Daemon...")
     print(f"Using Model: {args.model.upper()}")

@@ -353,7 +353,7 @@ def run_rainviewer_nowcast_for_zone(zone_id, zone_name, cache_dir, zoom, tile_x,
     print(f"Successfully generated {zone_name} hazard alerts: {len(alerts)} locations monitored.")
     return alerts, forecast_cells, coherence_passed
 
-if __name__ == "__main__":
+def run_hazard_tracker_loop():
     import time
     import psutil
     import os
@@ -407,3 +407,6 @@ if __name__ == "__main__":
         time.sleep(180)
 
 
+
+if __name__ == '__main__':
+    run_hazard_tracker_loop()

@@ -39,7 +39,7 @@ def poll_rainviewer():
             logging.warning(f"Failed to fetch RainViewer API: {e}")
         time.sleep(300)
 
-threading.Thread(target=poll_rainviewer, daemon=True).start()
+# Old threading removed
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "config"))
@@ -49,6 +49,48 @@ import alert_dispatcher
 from data_fusion import generate_insat_satellite_ctt, generate_lightning_density_grid, compute_fused_convective_hazard_index
 
 app = FastAPI(title="India Convective Nowcasting Multi-Region API", version="4.0.0")
+
+import time
+import traceback
+from run_nowcast import main as run_nowcast_main
+from src.hazard_tracker import run_hazard_tracker_loop
+
+def resilient_nowcast_thread():
+    while True:
+        try:
+            print("[DAEMON] Starting run_nowcast...")
+            run_nowcast_main()
+        except Exception as e:
+            print(f"[DAEMON ERROR] run_nowcast crashed: {e}")
+            traceback.print_exc()
+            time.sleep(30)
+
+def resilient_hazard_tracker_thread():
+    while True:
+        try:
+            print("[DAEMON] Starting hazard_tracker...")
+            run_hazard_tracker_loop()
+        except Exception as e:
+            print(f"[DAEMON ERROR] hazard_tracker crashed: {e}")
+            traceback.print_exc()
+            time.sleep(30)
+
+def resilient_rainviewer_poll():
+    while True:
+        try:
+            poll_rainviewer()
+            time.sleep(60)
+        except Exception as e:
+            print(f"[DAEMON ERROR] poll_rainviewer crashed: {e}")
+            traceback.print_exc()
+            time.sleep(30)
+
+@app.on_event("startup")
+def start_background_daemons():
+    print("[API] Starting background daemons...")
+    threading.Thread(target=resilient_nowcast_thread, daemon=True).start()
+    threading.Thread(target=resilient_hazard_tracker_thread, daemon=True).start()
+    threading.Thread(target=resilient_rainviewer_poll, daemon=True).start()
 
 import psutil
 
