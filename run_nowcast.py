@@ -16,15 +16,9 @@ import datetime
 import time
 import numpy as np
 from scipy import ndimage
-import torch
 
-try:
-    import pysteps
-    from pysteps import io, motion, nowcasts
-    from pysteps.utils import conversion, transformation
-    HAS_PYSTEPS = True
-except ImportError:
-    HAS_PYSTEPS = False
+
+
 
 sys.path.append("src")
 sys.path.append("src")
@@ -154,8 +148,23 @@ def main():
         print("No .pgm.gz files found.")
         return
 
-    sys.path.append('models/convlstm')
-    from train import read_pgm_gz
+    def read_pgm_gz(file_path):
+        import gzip
+        import numpy as np
+        with gzip.open(file_path, 'rb') as f:
+            magic = f.readline().strip()
+            if magic != b'P5':
+                raise ValueError(f"Not a P5 PGM file: {file_path}")
+            while True:
+                line = f.readline()
+                if not line.startswith(b'#'): break
+            dims = line.split()
+            width, height = int(dims[0]), int(dims[1])
+            maxval = int(f.readline().strip())
+            img_data = f.read()
+            img = np.frombuffer(img_data, dtype=np.uint8).reshape((height, width))
+            img = img.astype(np.float32) / 255.0
+            return img
 
     sys.path.append('src')
     import db_storage
@@ -165,6 +174,7 @@ def main():
         sys.path.append('src')
         from opencv_optical_flow import extrapolate_opencv
     else:
+        import torch
         from model import Seq2SeqConvLSTM
         import cv2
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

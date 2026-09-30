@@ -51,3 +51,7 @@ Both pipelines are fully operational, real, and functional. They serve different
 
 **Update / Correction (Step 2.5 Validation):**
 While the angular coherence gate correctly passes organized storms, subsequent quantification revealed that the spatial smoothing filters (median_filter(size=21) + gaussian_filter(sigma=5)) are drastically under-computing the storm's displacement magnitude. For the coherent storm on Tile 97, 56, the raw Farneback mean magnitude was 3.10 px/frame (~21.2 km/h), but the filtered magnitude was crushed to 0.37 px/frame (~2.5 km/h) — an 8.4x reduction. This confirms the earlier suspicion: large kernel sizes on sparse/patchy rain fields pull in too many zero-velocity background pixels, artificially dragging the legitimate storm velocity down to a near-standstill.
+
+### RainViewer Upstream Source Data Verification - Sept 30, 2026
+Verified against RainViewer's own live rendering for the Northeast & Meghalaya region: the blocky rectangular column artifact extending into Myanmar is present in the raw upstream RainViewer source rendering itself. Confirmed to be a property of the source data / upstream extrapolation, not a bug in our rendering pipeline (`api/server.py`) or advection engine (`hazard_tracker.py`).
+
