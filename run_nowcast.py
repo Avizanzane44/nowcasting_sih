@@ -174,15 +174,21 @@ def main():
         sys.path.append('src')
         from opencv_optical_flow import extrapolate_opencv
     else:
-        import torch
-        from model import Seq2SeqConvLSTM
-        import cv2
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        convlstm_model = Seq2SeqConvLSTM(in_channels=1, hidden_channels=8, out_channels=1, kernel_size=(3, 3)).to(device)
-        weights_path = "models/convlstm/convlstm_weights.pth"
-        if os.path.exists(weights_path):
-            convlstm_model.load_state_dict(torch.load(weights_path, map_location=device))
-        convlstm_model.eval()
+        try:
+            import torch
+            from model import Seq2SeqConvLSTM
+            import cv2
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            convlstm_model = Seq2SeqConvLSTM(in_channels=1, hidden_channels=8, out_channels=1, kernel_size=(3, 3)).to(device)
+            weights_path = "models/convlstm/convlstm_weights.pth"
+            if os.path.exists(weights_path):
+                convlstm_model.load_state_dict(torch.load(weights_path, map_location=device))
+            convlstm_model.eval()
+        except ImportError:
+            print("[WARN] PyTorch not installed. Falling back to OPTICAL_FLOW.")
+            args.model = "optical_flow"
+            sys.path.append('src')
+            from opencv_optical_flow import extrapolate_opencv
 
     n_leadtimes = 12
     print(f"Found {len(gz_files)} historical radar frames. Starting replay...")
